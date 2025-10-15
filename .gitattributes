@@ -1,0 +1,43 @@
+# ----------------------------------------------
+# Git Attributes for poolarserver-bim-template
+# ----------------------------------------------
+
+# Normalize all text files to use LF line endings in the repo
+# Git will convert to CRLF on checkout if user config requires
+* text=auto eol=lf
+
+# Treat common source code as text and ensure LF
+*.cs     text diff=csharp eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.py     text eol=lf
+*.js     text eol=lf
+*.ts     text eol=lf
+*.tsx    text eol=lf
+*.html   text eol=lf
+*.css    text eol=lf
+*.md     text eol=lf
+*.sh     text eol=lf
+*.Dockerfile text eol=lf
+
+# Prevent Git from trying to normalize binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.tar binary
+*.gz  binary
+*.dll binary
+*.exe binary
+*.pdf binary
+
+# Improve GitHub diff rendering
+*.cs diff=csharp
+*.py diff=python
+*.json diff=json
+
+# Optional: mark large dataset folders as binary (if you add them later)
+# data/** binary

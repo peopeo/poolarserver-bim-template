@@ -1,0 +1,25 @@
+# 🧩 Conventional Commit Template
+# Format: <type>(<scope>): <short summary>
+#
+# <type>    = feat | fix | docs | style | refactor | test | chore
+# <scope>   = optional module or component (e.g. api, db, ui)
+# <summary> = imperative, present tense (no period at end)
+#
+# Example:
+#   feat(api): add endpoint for IFC job submission
+#   fix(db): correct connection string for Docker dev setup
+#   docs(readme): add setup instructions for devcontainer
+#   refactor(services): simplify IfcService dependency injection
+#
+# ------------------------------------------------------------
+# The following lines are your commit description.
+# They will not be included in the commit message if commented out.
+
+# Motivation:
+#   Why is this change necessary?
+
+# Details:
+#   What exactly was changed and how?
+
+# Notes:
+#   Any extra information for reviewers or future maintainers.
