@@ -1,0 +1,23 @@
+# Shared Git configuration for this repository
+[commit]
+    # Automatically use the shared commit message template
+    template = .gitmessage.txt
+
+[core]
+    # Normalize line endings to LF on commit, safe for Linux/Mac/WSL
+    autocrlf = input
+
+[color]
+    ui = auto
+
+[push]
+    default = simple
+
+[pull]
+    rebase = false
+
+[merge]
+    conflictstyle = diff3
+
+[diff]
+    tool = default

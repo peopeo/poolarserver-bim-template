@@ -1,22 +1,20 @@
 {
-  "name": "Poolarserver BIM Template",
-  "dockerComposeFile": [
-    "docker-compose.yml"
-  ],
+  "name": "IFC Server DevContainer",
+  "dockerComposeFile": "docker-compose.yml",
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/poolarserver-bim-template",
   "postCreateCommand": "bash /workspaces/poolarserver-bim-template/post_create.sh",
-  "forwardPorts": [5000, 5173, 5432],
-  "remoteUser": "root",
+  "postStartCommand": "bash /workspaces/poolarserver-bim-template/.devcontainer/post_start.sh",
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-dotnettools.csdevkit",
-        "ms-azuretools.vscode-docker",
+        "ms-dotnettools.csharp",
         "ms-python.python",
+        "ms-azuretools.vscode-docker",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode"
       ]
     }
-  }
+  },
+  "remoteUser": "root"
 }
