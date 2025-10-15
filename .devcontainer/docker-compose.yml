@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  # --- PostgreSQL database ---
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ifcdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - devnet
+
+  # --- Backend (.NET + IfcOpenShell) ---
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile.ifcserver
+    command: sleep infinity
+    depends_on:
+      db:
+        condition: service_started
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=ifcdb;Username=postgres;Password=postgres
+    ports:
+      - "5000:5000"
+      - "5173:5173" # optional, for webui preview later
+    volumes:
+      - ..:/workspaces/poolarserver-bim-template
+    networks:
+      - devnet
+
+networks:
+  devnet:
+    driver: bridge
+
+volumes:
+  postgres-data:

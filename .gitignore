@@ -1,0 +1,132 @@
+# ============================================================
+#   PoolarServer BIM Template - Combined .NET + Node + Python
+# ============================================================
+
+# === .NET build artifacts ===
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.log
+*.vspscc
+*.vssscc
+
+# === Build outputs ===
+/src/ifcserver/bin/
+/src/ifcserver/obj/
+/src/**/bin/
+/src/**/obj/
+
+# === VS Code ===
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# === Devcontainer ===
+.devcontainer/postgres-data/
+.devcontainer/.env
+.devcontainer/.bash_history
+.devcontainer/.python_history
+docker-compose.override.yml
+Dockerfile*
+*.pid
+
+# === Node.js / WebUI ===
+webui/node_modules/
+webui/.parcel-cache/
+webui/dist/
+webui/build/
+webui/.next/
+webui/out/
+webui/npm-debug.log*
+webui/yarn-debug.log*
+webui/yarn-error.log*
+webui/pnpm-debug.log*
+webui/package-lock.json
+webui/.env.local
+webui/.env.development.local
+webui/.env.production.local
+webui/.env.test.local
+
+# === Python / AI / Scripts ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+.eggs/
+.env/
+.env.*
+.venv/
+venv/
+.ipynb_checkpoints/
+*.ipynb
+*.pytest_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+*.log
+.tox/
+build/
+develop-eggs/
+dist/
+downloads/
+pip-wheel-metadata/
+.wheelhouse/
+.pyre/
+.dmypy.json
+.pytype/
+__pypackages__/
+site/
+.cache/
+*.whl
+*.pkl
+*.h5
+*.onnx
+
+# === Temporary / Data ===
+*.tmp
+*.bak
+*.old
+*.swp
+*.seed
+*.pid
+*.lock
+*.pid.lock
+*.sqlite
+*.sqlite3
+
+# === OS / Editor cruft ===
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Git / Patch ===
+*.orig
+*.rej
+*.patch
+
+# === Logs / Reports ===
+*.log
+*.tlog
+*.err
+*.out
+*.report
+*.csv
+*.jsonl
+
+# === Miscellaneous ===
+.idea/
+*.iml
+*.db
+*.DS_Store
+*.log
+*.cache/
+*.config/

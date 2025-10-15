@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch IFC Server",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build ifcserver",
+      "program": "${workspaceFolder}/src/ifcserver/bin/Debug/net9.0/IfcServer.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/ifcserver",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://0.0.0.0:5000",
+        "ConnectionStrings__DefaultConnection": "Host=db;Port=5432;Database=ifcdb;Username=postgres;Password=postgres"
+      },
+      "sourceFileMap": {
+        "/workspaces/poolarserver-bim-template": "${workspaceFolder}"
+      }
+    }
+  ]
+}
