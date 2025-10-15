@@ -97,18 +97,53 @@ The devcontainer already includes **Node.js** and exposes port **5173**, so no a
 ---
 
 ```plaintext
-src/webui/
-├── public/             # Static assets (logos, manifest, etc.)
+poolarserver-bim-template/
+├── .devcontainer/                    # VS Code Dev Container setup
+│   ├── docker-compose.yml            # Defines containers for .NET + Postgres
+│   ├── Dockerfile.ifcserver          # Build for .NET backend
+│   ├── Dockerfile.webui              # Build for frontend (Node/Vite)
+│   ├── devcontainer.json             # Container configuration and hooks
+│   ├── post_create.sh                # Run after container creation (build, restore)
+│   └── post_start.sh                 # Post-start tasks (e.g., git setup)
+│
+├── .vscode/                          # VS Code workspace setup
+│   ├── launch.json                   # Debug configuration for .NET server
+│   └── tasks.json                    # Build tasks for .NET
+│
 ├── src/
-│   ├── components/     # Reusable React components
-│   ├── pages/          # Page-level layouts and routing
-│   ├── hooks/          # Custom React hooks for API calls
-│   ├── services/       # API abstraction layer
-│   ├── App.jsx         # Root component
-│   └── main.jsx        # React entry point
-├── index.html
-├── package.json
-└── vite.config.js
+│   ├── ifcserver/                    # ASP.NET Core backend (API + static hosting)
+│   │   ├── Data/
+│   │   │   └── AppDbContext.cs       # EF Core DB context
+│   │   ├── Models/
+│   │   │   └── ConversionJob.cs      # Job entity for IFC conversion
+│   │   ├── Services/
+│   │   │   ├── IfcService.cs         # Business logic for job processing
+│   │   │   ├── IIfcService.cs        # Service interface
+│   │   │   └── ProcessRunner.cs      # Handles external IFC conversion processes
+│   │   ├── appsettings.json          # Backend configuration (DB, logging)
+│   │   ├── IfcServer.csproj          # Project file
+│   │   └── Program.cs                # Application entry point
+│   │
+│   └── webui/                        # React + Vite frontend
+│       ├── public/                   # Static assets (icons, manifest, etc.)
+│       ├── src/
+│       │   ├── components/           # Reusable React components
+│       │   ├── pages/                # Page layouts and routes
+│       │   ├── hooks/                # Custom React hooks
+│       │   ├── services/             # API abstraction layer
+│       │   ├── App.jsx               # Root component
+│       │   └── main.jsx              # Entry point
+│       ├── index.html
+│       ├── package.json
+│       └── vite.config.js
+│
+├── .gitignore                        # Git ignore rules
+├── .gitattributes                    # Cross-platform line endings
+├── .gitmessage.txt                   # Commit message template
+├── .editorconfig                     # Code formatting conventions
+├── dotnet.log                        # Runtime log (ignored by git)
+├── poolarserver-bim-template.sln     # Visual Studio solution file
+└── README.md                         # Project documentation
 ```
 
 
