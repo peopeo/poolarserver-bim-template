@@ -899,27 +899,29 @@ The DevContainer automatically mounts source code and ports:
 
 ### 🧠 Development Mode (Vite + .NET + PostgreSQL)
 
-`┌────────────────────────────┐ │         Browser             │ │   (localhost:5173)          │ └────────────┬────────────────┘              │  🔁 Live reload (Vite)              ▼ ┌────────────────────────────┐ │  React App (Vite DevServer)│ │  src/webui/ (Node.js)      │ └────────────┬────────────────┘              │  REST API calls (fetch/axios)              ▼ ┌────────────────────────────┐ │  .NET Backend (IfcServer)  │ │  Kestrel @ localhost:5000  │ │  + Swagger UI (/swagger)   │ └────────────┬────────────────┘              │  Npgsql EF Core              ▼ ┌────────────────────────────┐ │   PostgreSQL Database      │ │   db:5432 (Docker service) │ └────────────────────────────┘`
+` ```text Browser (localhost:5173)         │         ▼ React App (Vite Dev Server) src/webui/ (Node.js)         │         ▼ .NET Backend (IfcServer) Kestrel @ localhost:5000 + Swagger UI (/swagger)         │         ▼ PostgreSQL Database db:5432 (Docker service) ``` `
 
 🟢 **Hot reload:** Vite rebuilds the React app automatically.  
-🟢 **Debug independently:** Both the backend and frontend can be started, paused, and stopped separately in VS Code.  
+🟢 **Debug independently:** Frontend and backend can be started, paused, and stopped separately.  
 🟢 **Swagger:** Available at [http://localhost:5000/swagger](http://localhost:5000/swagger).
 
 ---
 
 ### 🚀 Production Mode (Kestrel serving React build)
 
-`┌────────────────────────────┐ │         Browser             │ │   (localhost:5000)          │ └────────────┬────────────────┘              │              ▼ ┌────────────────────────────┐ │  .NET Backend (IfcServer)  │ │  Serves React build        │ │  from src/webui/dist       │ │  (Static files + API)      │ └────────────┬────────────────┘              │  Npgsql EF Core              ▼ ┌────────────────────────────┐ │   PostgreSQL Database      │ │   db:5432 (Docker service) │ └────────────────────────────┘`
+` ```text Browser (localhost:5000)         │         ▼ .NET Backend (IfcServer) Serves React build from src/webui/dist (Static files + API)         │         ▼ PostgreSQL Database db:5432 (Docker service) ``` `
 
-🟡 **Static hosting:** The prebuilt React app is served by Kestrel (`/index.html`).  
-🟡 **Swagger disabled:** Production mode does not expose `/swagger`.  
-🟡 **Single entry point:** All requests go through the backend (including SPA routes).
+🟡 **Static hosting:** React app is served by Kestrel (`/index.html`).  
+🟡 **Swagger disabled:** Not available in production mode.  
+🟡 **Single entry point:** All requests (frontend + API) go through the backend.
 
 ---
 
 ### 🔧 Summary
 
-|Mode|Port|Frontend Served By|Swagger|Hot Reload|How to Start|
+|Mode|Port(s)|Frontend Served By|Swagger|Hot Reload|Launch Config|
 |---|---|---|---|---|---|
-|**Development**|5173 (Vite) + 5000 (.NET)|Vite Dev Server|✅ Yes|✅ Yes|`Full Dev Mode` launch config|
-|**Production**|5000|Kestrel (.NET)|🚫 No|🚫 No|`Backend Prod` launch config|
+|**Development**|5173 (Vite) + 5000 (.NET)|Vite Dev Server|✅ Yes|✅ Yes|`Full Dev Mode`|
+|**Production**|5000|Kestrel (.NET)|🚫 No|🚫 No|`Backend Prod`|
+
+---
