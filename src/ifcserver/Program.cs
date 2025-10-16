@@ -6,7 +6,7 @@ using Microsoft.Extensions.FileProviders;
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------------------------------------------------
-// 1. Add services to the dependency injection container
+// 1️⃣ Configure services (Dependency Injection)
 // ---------------------------------------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -20,59 +20,78 @@ builder.Services.AddScoped<IIfcService, IfcService>();
 var app = builder.Build();
 
 // ---------------------------------------------------
-// 2. Configure the HTTP request pipeline (Middleware)
+// 2️⃣ Configure Middleware Pipeline
 // ---------------------------------------------------
 
-// It's good practice to redirect HTTP to HTTPS in all environments.
+// Common middleware (applies to all environments)
 app.UseHttpsRedirection();
-
-// ✅ Always enable Swagger and Swagger UI, regardless of the environment.
-app.UseSwagger();
-app.UseSwaggerUI();
-
-// Get the physical path to the React app's 'dist' folder.
-var reactAppDist = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "webui", "dist"));
-
-if (Directory.Exists(reactAppDist))
-{
-    // Configure the app to serve static files (CSS, JS, images) from the React app.
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(reactAppDist)
-    });
-}
-else
-{
-    Console.WriteLine($"⚠️ React build not found at {reactAppDist}");
-}
-
-// These are required for API controllers to work.
 app.UseRouting();
 app.UseAuthorization();
 
-// Map your API controllers. Requests starting with "/api/..." will be handled here.
-app.MapControllers();
-
-if (Directory.Exists(reactAppDist))
+// ---------------------------------------------------
+// 🌱 Development mode configuration
+// ---------------------------------------------------
+if (app.Environment.IsDevelopment())
 {
-    // As a fallback for any request that didn't match an API controller,
-    // a static file, or Swagger, serve the 'index.html' file.
-    app.MapFallbackToFile("index.html", new StaticFileOptions
-    {
-        FileProvider = new PhysicalFileProvider(reactAppDist)
-    });
+    Console.WriteLine("🚀 Running in DEVELOPMENT mode");
+
+    // Enable Swagger UI for API testing
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
+    // Optional: enable developer exception page
+    app.UseDeveloperExceptionPage();
 }
 
 // ---------------------------------------------------
-// 3. Application startup tasks
+// 🏭 Production mode configuration
 // ---------------------------------------------------
+else if (app.Environment.IsProduction())
+{
+    Console.WriteLine("🏭 Running in PRODUCTION mode");
 
-// Ensure the database is created on startup.
+    // Get the React build path
+    var reactAppDist = Path.GetFullPath(
+        Path.Combine(app.Environment.ContentRootPath, "..", "webui", "dist")
+    );
+
+    if (Directory.Exists(reactAppDist))
+    {
+        Console.WriteLine($"✅ Serving React build from: {reactAppDist}");
+
+        // Serve static files (JS, CSS, assets)
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(reactAppDist)
+        });
+
+        // Fallback to index.html for SPA routes
+        app.MapFallbackToFile("index.html", new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(reactAppDist)
+        });
+    }
+    else
+    {
+        Console.WriteLine($"⚠️ React build not found at: {reactAppDist}");
+    }
+}
+
+// ---------------------------------------------------
+// 3️⃣ Map Controllers (API endpoints)
+// ---------------------------------------------------
+app.MapControllers();
+
+// ---------------------------------------------------
+// 4️⃣ Ensure database exists
+// ---------------------------------------------------
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
-// Run the application.
+// ---------------------------------------------------
+// 5️⃣ Start the application
+// ---------------------------------------------------
 app.Run();

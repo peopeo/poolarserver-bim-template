@@ -2,14 +2,45 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "build webui",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/src/webui"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "start webui dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/src/webui"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in"
+        }
+      }
+    },
+    {
       "label": "build ifcserver",
-      "command": "dotnet",
       "type": "process",
+      "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/ifcserver/IfcServer.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
+        "${workspaceFolder}/src/ifcserver/IfcServer.csproj"
       ],
       "problemMatcher": "$msCompile"
     }

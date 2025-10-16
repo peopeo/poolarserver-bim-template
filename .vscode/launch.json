@@ -2,26 +2,65 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch IFC Server",
+      // 1️⃣ Backend-only development (Swagger enabled)
+      "name": "Backend Dev (IFC Server only)",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build ifcserver",
       "program": "${workspaceFolder}/src/ifcserver/bin/Debug/net9.0/IfcServer.dll",
-      "args": [],
       "cwd": "${workspaceFolder}/src/ifcserver",
-      "stopAtEntry": false,
-      "serverReadyAction": {
-        "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
-      },
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "http://0.0.0.0:5000",
         "ConnectionStrings__DefaultConnection": "Host=db;Port=5432;Database=ifcdb;Username=postgres;Password=postgres"
       },
-      "sourceFileMap": {
-        "/workspaces/poolarserver-bim-template": "${workspaceFolder}"
-      }
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      // 2️⃣ Frontend-only development (Vite hot reload)
+      "name": "Frontend Dev (React/Vite only)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/src/webui",
+      "console": "integratedTerminal"
+    },
+    {
+      // 3️⃣ Full-stack integration / production test
+      "name": "Full-stack Prod (Kestrel + React build)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build webui",
+      "program": "${workspaceFolder}/src/ifcserver/bin/Debug/net9.0/IfcServer.dll",
+      "cwd": "${workspaceFolder}/src/ifcserver",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "ASPNETCORE_URLS": "http://0.0.0.0:5000",
+        "ConnectionStrings__DefaultConnection": "Host=db;Port=5432;Database=ifcdb;Username=postgres;Password=postgres"
+      },
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      // 4️⃣ Combined Dev Mode (Backend + Frontend hot reload)
+      "name": "Full Dev Mode (Backend + Vite)",
+      "configurations": [
+        "Backend Dev (IFC Server only)",
+        "Frontend Dev (React/Vite only)"
+      ],
+      "preLaunchTask": "build ifcserver"
     }
   ]
 }
