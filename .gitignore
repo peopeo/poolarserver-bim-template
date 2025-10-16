@@ -35,21 +35,21 @@ Dockerfile*
 *.pid
 
 # === Node.js / WebUI ===
-webui/node_modules/
-webui/.parcel-cache/
-webui/dist/
-webui/build/
-webui/.next/
-webui/out/
-webui/npm-debug.log*
-webui/yarn-debug.log*
-webui/yarn-error.log*
-webui/pnpm-debug.log*
-webui/package-lock.json
-webui/.env.local
-webui/.env.development.local
-webui/.env.production.local
-webui/.env.test.local
+src/webui/node_modules/
+src/webui/.parcel-cache/
+src/webui/dist/
+src/webui/build/
+src/webui/.next/
+src/webui/out/
+src/webui/npm-debug.log*
+src/webui/yarn-debug.log*
+src/webui/yarn-error.log*
+src/webui/pnpm-debug.log*
+src/webui/package-lock.json
+src/webui/.env.local
+src/webui/.env.development.local
+src/webui/.env.production.local
+src/webui/.env.test.local
 
 # === Python / AI / Scripts ===
 __pycache__/
