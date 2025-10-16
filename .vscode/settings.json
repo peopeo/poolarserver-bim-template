@@ -1,0 +1,8 @@
+{
+  // keep debug sessions visible side-by-side
+  "debug.showSubSessionsInToolBar": true,
+  // reopen the debug toolbar when a new session starts
+  "debug.openDebug": "openOnSessionStart",
+  // keep the console open after one session stops
+  "debug.console.closeOnEnd": false
+}
