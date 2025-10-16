@@ -1,19 +1,15 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-const API_BASE = process.env.VITE_API_BASE_URL || "http://localhost:5000";
-
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: "0.0.0.0",
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: API_BASE,
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, "")
-      }
-    }
+    host: true,   // wichtig für Zugriff von außerhalb des Containers
+    port: 5173
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true // 🔥 notwendig für funktionierendes Debugging
   }
-});
+})

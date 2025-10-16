@@ -21,8 +21,9 @@
       },
       "console": "integratedTerminal"
     },
+
     {
-      // 2️⃣ Frontend-only development (Vite hot reload)
+      // 2️⃣ Frontend-only dev server (no debugger)
       "name": "Frontend Dev (React/Vite only)",
       "type": "node",
       "request": "launch",
@@ -31,8 +32,9 @@
       "cwd": "${workspaceFolder}/src/webui",
       "console": "integratedTerminal"
     },
+
     {
-      // 3️⃣ Full-stack integration / production test
+      // 3️⃣ Full-stack production integration
       "name": "Full-stack Prod (Kestrel + React build)",
       "type": "coreclr",
       "request": "launch",
@@ -50,17 +52,42 @@
         "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
       },
       "console": "integratedTerminal"
+    },
+
+    {
+      // 4️⃣ Frontend Debug mit Chrome/Edge und funktionierenden Breakpoints
+      "name": "Frontend Debug (Vite in Chrome)",
+      "type": "chrome", // oder "pwa-msedge"
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src/webui",
+      "sourceMaps": true,
+      "trace": true,
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "start webui dev",
+      "sourceMapPathOverrides": {
+        // ⚙️ Mappings für Devcontainer
+        "webpack:///src/*": "${webRoot}/src/*",
+        "/*": "${workspaceFolder}/*",
+        "/workspaces/*": "${workspaceFolder}/*"
+      },
+      "presentation": {
+        "group": "frontend",
+        "order": 2
+      }
     }
   ],
+
   "compounds": [
     {
-      // 4️⃣ Combined Dev Mode (Backend + Frontend hot reload)
-      "name": "Full Dev Mode (Backend + Vite)",
+      // 5️⃣ Combined Full Dev Mode
+      "name": "Full Dev Debug (Backend + Frontend)",
       "configurations": [
         "Backend Dev (IFC Server only)",
-        "Frontend Dev (React/Vite only)"
+        "Frontend Debug (Vite in Chrome)"
       ],
-      "preLaunchTask": "build ifcserver"
+      "preLaunchTask": "build ifcserver",
+      "stopAll": true
     }
   ]
 }
