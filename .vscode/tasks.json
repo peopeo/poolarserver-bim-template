@@ -29,8 +29,9 @@
         ],
         "background": {
           "activeOnStart": true,
+          // VS Code waits for this pattern before attaching the debugger
           "beginsPattern": "VITE",
-          "endsPattern": "ready in"
+          "endsPattern": "Local:"
         }
       }
     },
