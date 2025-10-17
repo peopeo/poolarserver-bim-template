@@ -56,8 +56,8 @@ export function useXeokit(canvasId: string, treeViewContainerId?: string, navCub
       return new Promise((resolve) => {
         const sceneModel = xktLoaderRef.current.load({
           id: model.id,
-          src: `/WestRiverSideHospital/${model.name}.xkt`,
-          metaModelSrc: `/WestRiverSideHospital/${model.name}.json`,
+          src: `/api/IfcTestData/ifctestxkt/${model.name}`,
+          metaModelSrc: `/api/IfcTestData/ifctestjson/${model.name}`,
           edges: true,
           excludeUnclassifiedObjects: model.name === 'structure' || model.name === 'architectural'
         });
