@@ -1,0 +1,93 @@
+/* TreeView Plugin Styles */
+#xeokit-treeview ul {
+  list-style: none;
+  padding-left: 1.75em;
+  margin: 0;
+}
+
+#xeokit-treeview ul li {
+  position: relative;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+#xeokit-treeview ul li a {
+  background-color: #eee;
+  border-radius: 50%;
+  color: #000;
+  display: inline-block;
+  height: 1.5em;
+  width: 1.5em;
+  left: -1.5em;
+  position: absolute;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.5em;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+#xeokit-treeview ul li a.plus {
+  background-color: #ded;
+}
+
+#xeokit-treeview ul li a.minus {
+  background-color: #eee;
+}
+
+#xeokit-treeview ul li a:active {
+  top: 1px;
+}
+
+#xeokit-treeview ul li span:hover {
+  color: white;
+  cursor: pointer;
+  background: #3b82f6;
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 3px;
+}
+
+#xeokit-treeview ul li span {
+  display: inline-block;
+  padding-left: 2px;
+  height: 23px;
+  line-height: 23px;
+  cursor: pointer;
+}
+
+#xeokit-treeview .highlighted-node {
+  border: solid 1px #3b82f6;
+  background: #dbeafe;
+  color: #1e40af;
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 3px;
+}
+
+/* Dark mode styles */
+.dark #xeokit-treeview ul li a {
+  background-color: #4b5563;
+  color: #fff;
+}
+
+.dark #xeokit-treeview ul li a.plus {
+  background-color: #6b7280;
+}
+
+.dark #xeokit-treeview ul li a.minus {
+  background-color: #4b5563;
+}
+
+.dark #xeokit-treeview ul li span:hover {
+  background: #3b82f6;
+  color: white;
+}
+
+.dark #xeokit-treeview .highlighted-node {
+  border-color: #60a5fa;
+  background: #1e3a8a;
+  color: #93c5fd;
+}
