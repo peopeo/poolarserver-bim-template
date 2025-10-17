@@ -12,7 +12,7 @@ export function XeokitViewer({ darkMode }: XeokitViewerProps) {
   const treeViewContainerId = 'xeokit-treeview';
   const navCubeCanvasId = 'xeokit-navcube';
 
-  const { viewerRef, treeViewRef, navCubeRef, isLoading, loadingStatus } = useXeokit(
+  const { viewerRef, treeViewRef, navCubeRef, isLoading, loadingStatus, reloadModels } = useXeokit(
     canvasId,
     treeViewContainerId,
     navCubeCanvasId
@@ -64,6 +64,11 @@ export function XeokitViewer({ darkMode }: XeokitViewerProps) {
     if (viewerRef.current) {
       viewerRef.current.cameraFlight.flyTo(viewerRef.current.scene);
     }
+  };
+
+  const handleReloadModel = () => {
+    // Reload models without refreshing the page
+    reloadModels();
   };
 
   return (
@@ -140,25 +145,6 @@ export function XeokitViewer({ darkMode }: XeokitViewerProps) {
             pointerEvents: 'all'
           }}
         />
-
-        {/* Loading overlay */}
-        {isLoading && (
-          <div
-            className={`absolute inset-0 flex items-center justify-center ${
-              darkMode ? 'bg-gray-900 bg-opacity-80' : 'bg-white bg-opacity-80'
-            } pointer-events-none z-30`}
-          >
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
-              <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                Loading Models...
-              </p>
-              <p className={`text-sm mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                {loadingStatus}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
       <div
@@ -219,6 +205,7 @@ export function XeokitViewer({ darkMode }: XeokitViewerProps) {
           {treeViewOpen ? 'Hide' : 'Show'} Structure
         </button>
         <button
+          onClick={handleReloadModel}
           disabled={isLoading}
           className={`px-4 py-2 rounded-lg text-sm font-medium ml-auto ${
             isLoading
@@ -226,7 +213,7 @@ export function XeokitViewer({ darkMode }: XeokitViewerProps) {
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          Upload New Model
+          Reload Model
         </button>
       </div>
     </div>
