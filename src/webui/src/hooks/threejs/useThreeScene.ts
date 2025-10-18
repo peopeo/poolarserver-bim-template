@@ -236,6 +236,13 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
     }
   }, [canvasId, antialias, transparent, backgroundColor, showGrid, gridSize, autoResize]);
 
+  // Update scene background when backgroundColor changes
+  useEffect(() => {
+    if (sceneRef.current && !transparent) {
+      sceneRef.current.background = new THREE.Color(backgroundColor);
+    }
+  }, [backgroundColor, transparent]);
+
   return {
     scene: sceneRef.current,
     camera: cameraRef.current,

@@ -6,6 +6,7 @@ interface NavigationGizmoProps {
   camera: THREE.Camera | null;
   target?: THREE.Vector3;
   onCameraChange?: () => void;
+  darkMode?: boolean;
 }
 
 const MIN_GIZMO_SIZE = 80;
@@ -16,6 +17,7 @@ export const NavigationGizmo: React.FC<NavigationGizmoProps> = ({
   camera,
   target = new THREE.Vector3(0, 0, 0),
   onCameraChange,
+  darkMode = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -218,10 +220,13 @@ export const NavigationGizmo: React.FC<NavigationGizmoProps> = ({
           width: '100%',
           height: '100%',
           borderRadius: '50%',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-          border: '2px solid #555',
-          background:
-            'radial-gradient(circle, rgba(60,60,60,0.95) 0%, rgba(40,40,40,0.98) 100%)',
+          boxShadow: darkMode
+            ? '0 4px 12px rgba(0,0,0,0.7)'
+            : '0 4px 12px rgba(0,0,0,0.3)',
+          border: darkMode ? '2px solid #555' : '2px solid #ccc',
+          background: darkMode
+            ? 'radial-gradient(circle, rgba(60,60,60,0.95) 0%, rgba(40,40,40,0.98) 100%)'
+            : 'radial-gradient(circle, rgba(240,240,240,0.95) 0%, rgba(220,220,220,0.98) 100%)',
           cursor: 'default',
         }}
       />
@@ -237,7 +242,9 @@ export const NavigationGizmo: React.FC<NavigationGizmoProps> = ({
           width: '20px',
           height: '20px',
           cursor: 'nwse-resize',
-          background: 'rgba(255,255,255,0.2)',
+          background: darkMode
+            ? 'rgba(255,255,255,0.2)'
+            : 'rgba(100,100,100,0.2)',
           borderRadius: '0 0 50% 0',
           pointerEvents: 'auto',
         }}

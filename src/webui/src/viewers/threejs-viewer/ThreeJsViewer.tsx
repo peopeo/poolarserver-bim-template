@@ -364,6 +364,7 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           camera={camera}
           target={controls?.target}
           onCameraChange={() => controls?.update()}
+          darkMode={darkMode}
         />
 
         {/* Top-right controls stack */}
