@@ -8,6 +8,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
+import { PropertyPanel } from '../../components/threejs';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import * as THREE from 'three';
@@ -190,6 +191,13 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           id={canvasId}
           className="absolute inset-0 w-full h-full"
           style={{ touchAction: 'none' }}
+        />
+
+        {/* Property Panel */}
+        <PropertyPanel
+          element={selectedElement}
+          onClose={clearSelection}
+          darkMode={darkMode}
         />
       </div>
 
