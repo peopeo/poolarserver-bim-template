@@ -8,7 +8,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput } from '../../components/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput, NavigationGizmo } from '../../components/threejs';
 import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
@@ -35,12 +35,15 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [lastExportInfo, setLastExportInfo] = useState<{ width: number; height: number; size: number; timestamp: Date } | undefined>();
   const [currentModelUrl, setCurrentModelUrl] = useState<string>(MOCK_GLTF_URL_ONLINE);
   const [modelLoadError, setModelLoadError] = useState<string | undefined>();
+  const [initialCameraState, setInitialCameraState] = useState<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+
+  const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
 
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
     antialias: true,
     transparent: false,
-    backgroundColor: darkMode ? '#1a1a1a' : '#f0f0f0',
+    backgroundColor,
     showGrid: true,
     gridSize: 50,
     autoResize: true
@@ -116,6 +119,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           controls.target.copy(center);
           controls.update();
 
+          // Save initial camera state for reset view
+          setInitialCameraState({
+            position: cameraPos.clone(),
+            target: center.clone()
+          });
+
           console.log(`Model loaded from: ${currentModelUrl}`);
           console.log(`Attached ${mockMetadata.elements.length} BIM elements metadata`);
         }
@@ -160,10 +169,10 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   }, []);
 
   const handleResetView = () => {
-    if (camera && controls) {
-      camera.position.set(10, 10, 10);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
+    if (camera && controls && initialCameraState) {
+      camera.position.copy(initialCameraState.position);
+      camera.lookAt(initialCameraState.target);
+      controls.target.copy(initialCameraState.target);
       controls.update();
     }
   };
@@ -326,29 +335,76 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
       className={`flex-1 m-4 ${darkMode ? 'bg-gray-900' : 'bg-gray-50'} rounded-lg overflow-hidden flex flex-col shadow-xl`}
     >
       {/* Header */}
-      <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-        <h2 className="text-lg font-semibold">Three.js BIM Viewer (PoC)</h2>
-        <p className={`text-sm mt-1 ${
-          sceneLoading || loadStatus === 'loading'
-            ? 'text-blue-500 animate-pulse'
-            : sceneError
-            ? 'text-red-500'
-            : hasSelection
-            ? 'text-green-500'
-            : 'text-gray-500'
-        }`}>
-          {sceneError
-            ? `Error: ${sceneError}`
-            : sceneLoading
-            ? 'Initializing viewer...'
-            : loadStatus === 'loading'
-            ? `${statusMessage}`
-            : hasSelection && selectedElement
-            ? `Selected: ${selectedElement.type}${selectedElement.name ? ' - ' + selectedElement.name : ''}`
-            : loadStatus === 'loaded'
-            ? `Model loaded - ${mockMetadata.elements.length} BIM elements (click to select)`
-            : 'Ready'}
-        </p>
+      <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} flex items-center justify-between`}>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold">Three.js BIM Viewer (PoC)</h2>
+          <p className={`text-sm mt-1 ${
+            sceneLoading || loadStatus === 'loading'
+              ? 'text-blue-500 animate-pulse'
+              : sceneError
+              ? 'text-red-500'
+              : hasSelection
+              ? 'text-green-500'
+              : 'text-gray-500'
+          }`}>
+            {sceneError
+              ? `Error: ${sceneError}`
+              : sceneLoading
+              ? 'Initializing viewer...'
+              : loadStatus === 'loading'
+              ? `${statusMessage}`
+              : hasSelection && selectedElement
+              ? `Selected: ${selectedElement.type}${selectedElement.name ? ' - ' + selectedElement.name : ''}`
+              : loadStatus === 'loaded'
+              ? `Model loaded - ${mockMetadata.elements.length} BIM elements (click to select)`
+              : 'Ready'}
+          </p>
+        </div>
+
+        {/* Header Action Buttons */}
+        <div className="flex items-center gap-2 ml-4 relative">
+          <div className="relative z-50">
+            <ExportPanel
+              onExport={handleExport}
+              onExportOrthographic={handleExportOrthographic}
+              lastExportInfo={lastExportInfo}
+              darkMode={darkMode}
+            />
+          </div>
+
+          <div className="relative z-50">
+            <ModelUrlInput
+              onLoadUrl={handleLoadModelUrl}
+              isLoading={loadStatus === 'loading'}
+              error={modelLoadError}
+              darkMode={darkMode}
+            />
+          </div>
+
+          <div className="relative z-50">
+            <FilterPanel
+              availableTypes={mockMetadata.types}
+              onFilterApply={handleFilterApply}
+              onFilterReset={handleFilterReset}
+              matchCount={filterResult?.matchCount}
+              totalCount={filterResult?.totalCount || mockMetadata.elements.length}
+              darkMode={darkMode}
+            />
+          </div>
+
+          <div className="relative z-50">
+            <ClippingPanel
+              onAddPreset={handleAddPreset}
+              onAddCustom={handleAddCustom}
+              onRemove={handleRemovePlane}
+              onToggleEnabled={handleTogglePlaneEnabled}
+              onUpdatePosition={handleUpdatePlanePosition}
+              onUpdateNormal={handleUpdatePlaneNormal}
+              activePlanes={activePlanes}
+              darkMode={darkMode}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Main Canvas Area */}
@@ -359,33 +415,11 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           style={{ touchAction: 'none' }}
         />
 
-        {/* Model URL Input */}
-        <ModelUrlInput
-          onLoadUrl={handleLoadModelUrl}
-          isLoading={loadStatus === 'loading'}
-          error={modelLoadError}
-          darkMode={darkMode}
-        />
-
-        {/* Filter Panel */}
-        <FilterPanel
-          availableTypes={mockMetadata.types}
-          onFilterApply={handleFilterApply}
-          onFilterReset={handleFilterReset}
-          matchCount={filterResult?.matchCount}
-          totalCount={filterResult?.totalCount || mockMetadata.elements.length}
-          darkMode={darkMode}
-        />
-
-        {/* Clipping Panel */}
-        <ClippingPanel
-          onAddPreset={handleAddPreset}
-          onAddCustom={handleAddCustom}
-          onRemove={handleRemovePlane}
-          onToggleEnabled={handleTogglePlaneEnabled}
-          onUpdatePosition={handleUpdatePlanePosition}
-          onUpdateNormal={handleUpdatePlaneNormal}
-          activePlanes={activePlanes}
+        {/* Navigation Gizmo */}
+        <NavigationGizmo
+          camera={camera}
+          target={controls?.target}
+          onCameraChange={() => controls?.update()}
           darkMode={darkMode}
         />
 
@@ -393,14 +427,6 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         <PropertyPanel
           element={selectedElement}
           onClose={clearSelection}
-          darkMode={darkMode}
-        />
-
-        {/* Export Panel */}
-        <ExportPanel
-          onExport={handleExport}
-          onExportOrthographic={handleExportOrthographic}
-          lastExportInfo={lastExportInfo}
           darkMode={darkMode}
         />
       </div>
