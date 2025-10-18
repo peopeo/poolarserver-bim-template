@@ -10,3 +10,5 @@ export type { UseModelLoaderResult } from './useModelLoader';
 
 export { useSelection } from './useSelection';
 export type { UseSelectionOptions, UseSelectionResult } from './useSelection';
+
+export { useGizmo } from './useGizmo';

@@ -8,7 +8,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput } from '../../components/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput, NavigationGizmo } from '../../components/threejs';
 import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
@@ -357,6 +357,13 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           id={canvasId}
           className="absolute inset-0 w-full h-full"
           style={{ touchAction: 'none' }}
+        />
+
+        {/* Navigation Gizmo */}
+        <NavigationGizmo
+          camera={camera}
+          target={controls?.target}
+          onCameraChange={() => controls?.update()}
         />
 
         {/* Model URL Input */}
