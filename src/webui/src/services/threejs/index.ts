@@ -23,3 +23,7 @@ export {
   DEFAULT_MOCK_MODEL_ID,
   AVAILABLE_MOCK_MODELS
 } from './mock-gltf-url';
+
+// Model loader
+export { ModelLoader } from './ModelLoader';
+export type { ModelLoadProgress, ModelLoadResult } from './ModelLoader';
