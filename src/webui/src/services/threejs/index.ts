@@ -27,3 +27,7 @@ export {
 // Model loader
 export { ModelLoader } from './ModelLoader';
 export type { ModelLoadProgress, ModelLoadResult } from './ModelLoader';
+
+// Selection manager
+export { SelectionManager } from './SelectionManager';
+export type { SelectionResult } from './SelectionManager';
