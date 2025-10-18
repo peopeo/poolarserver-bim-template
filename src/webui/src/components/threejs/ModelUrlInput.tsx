@@ -91,7 +91,7 @@ export function ModelUrlInput({
         </button>
       ) : (
         <div
-          className={`w-96 rounded-lg shadow-xl border ${
+          className={`absolute top-full right-0 mt-2 w-96 rounded-lg shadow-xl border ${
             darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
           }`}
         >
