@@ -4,8 +4,11 @@
  * Main Three.js BIM viewer component
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
+import { useModelLoader } from '../../hooks/threejs/useModelLoader';
+import { mockMetadata, MOCK_GLTF_URL_ONLINE } from '../../services/threejs';
+import { ModelLoader } from '../../services/threejs/ModelLoader';
 import * as THREE from 'three';
 
 interface ThreeJsViewerProps {
@@ -16,8 +19,10 @@ interface ThreeJsViewerProps {
 export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const canvasId = 'threejs-canvas';
   const containerRef = useRef<HTMLDivElement>(null);
+  const modelLoaderRef = useRef<ModelLoader>(new ModelLoader());
+  const [loadedModel, setLoadedModel] = useState<THREE.Group | null>(null);
 
-  const { scene, camera, renderer, controls, isLoading, error } = useThreeScene({
+  const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
     antialias: true,
     transparent: false,
@@ -27,45 +32,53 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     autoResize: true
   });
 
-  // Add a test cube to verify the viewer is working
+  const { loadModel, status: loadStatus, progress, statusMessage, modelResult } = useModelLoader();
+
+  // Load model when scene is ready
   useEffect(() => {
-    if (!scene) return;
+    if (!scene || !camera || !controls) return;
+    if (loadedModel) return; // Already loaded
 
-    // Create a test cube
-    const geometry = new THREE.BoxGeometry(2, 2, 2);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x4a90e2,
-      roughness: 0.5,
-      metalness: 0.2
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    cube.position.set(0, 1, 0);
-    cube.castShadow = true;
-    cube.receiveShadow = true;
-    scene.add(cube);
+    const loadGltfModel = async () => {
+      try {
+        const result = await loadModel(MOCK_GLTF_URL_ONLINE, mockMetadata);
 
-    // Add a ground plane
-    const planeGeometry = new THREE.PlaneGeometry(50, 50);
-    const planeMaterial = new THREE.MeshStandardMaterial({
-      color: darkMode ? 0x2a2a2a : 0xcccccc,
-      roughness: 0.8,
-      metalness: 0.1
-    });
-    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    plane.rotation.x = -Math.PI / 2;
-    plane.receiveShadow = true;
-    scene.add(plane);
+        if (result && result.model) {
+          // Add model to scene
+          scene.add(result.model);
+          setLoadedModel(result.model);
+
+          // Center and fit camera
+          const loader = modelLoaderRef.current;
+          loader.centerModel(result.model);
+
+          const cameraPos = loader.getOptimalCameraPosition(result.boundingBox, camera);
+          const center = result.boundingBox.getCenter(new THREE.Vector3());
+
+          camera.position.copy(cameraPos);
+          camera.lookAt(center);
+          controls.target.copy(center);
+          controls.update();
+
+          console.log(`Model loaded with ${mockMetadata.elements.length} BIM elements`);
+        }
+      } catch (err) {
+        console.error('Error loading model:', err);
+      }
+    };
+
+    loadGltfModel();
 
     // Cleanup
     return () => {
-      scene.remove(cube);
-      scene.remove(plane);
-      geometry.dispose();
-      material.dispose();
-      planeGeometry.dispose();
-      planeMaterial.dispose();
+      if (loadedModel && scene) {
+        scene.remove(loadedModel);
+        modelLoaderRef.current.disposeModel(loadedModel);
+        setLoadedModel(null);
+      }
     };
-  }, [scene, darkMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene, camera, controls]);
 
   // Handle resize
   useEffect(() => {
@@ -141,8 +154,22 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
       {/* Header */}
       <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
         <h2 className="text-lg font-semibold">Three.js BIM Viewer (PoC)</h2>
-        <p className={`text-sm mt-1 ${isLoading ? 'text-blue-500 animate-pulse' : error ? 'text-red-500' : 'text-gray-500'}`}>
-          {error ? `Error: ${error}` : isLoading ? 'Initializing viewer...' : 'Ready - Test cube displayed'}
+        <p className={`text-sm mt-1 ${
+          sceneLoading || loadStatus === 'loading'
+            ? 'text-blue-500 animate-pulse'
+            : sceneError
+            ? 'text-red-500'
+            : 'text-gray-500'
+        }`}>
+          {sceneError
+            ? `Error: ${sceneError}`
+            : sceneLoading
+            ? 'Initializing viewer...'
+            : loadStatus === 'loading'
+            ? `${statusMessage}`
+            : loadStatus === 'loaded'
+            ? `Model loaded - ${mockMetadata.elements.length} BIM elements`
+            : 'Ready'}
         </p>
       </div>
 
@@ -163,9 +190,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
       >
         <button
           onClick={handleResetView}
-          disabled={isLoading || !!error}
+          disabled={sceneLoading || loadStatus === 'loading' || !!sceneError}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            isLoading || error
+            sceneLoading || loadStatus === 'loading' || sceneError
               ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
               : darkMode
               ? 'bg-gray-700 hover:bg-gray-600'
@@ -176,9 +203,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         </button>
         <button
           onClick={handleFitToView}
-          disabled={isLoading || !!error}
+          disabled={sceneLoading || loadStatus === 'loading' || !!sceneError}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            isLoading || error
+            sceneLoading || loadStatus === 'loading' || sceneError
               ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
               : darkMode
               ? 'bg-gray-700 hover:bg-gray-600'
@@ -189,9 +216,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         </button>
         <button
           onClick={handleToggleGrid}
-          disabled={isLoading || !!error}
+          disabled={sceneLoading || loadStatus === 'loading' || !!sceneError}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            isLoading || error
+            sceneLoading || loadStatus === 'loading' || sceneError
               ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
               : darkMode
               ? 'bg-gray-700 hover:bg-gray-600'
