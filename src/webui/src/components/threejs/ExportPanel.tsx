@@ -93,7 +93,7 @@ export function ExportPanel({
   };
 
   return (
-    <div className="absolute bottom-4 right-4 z-10">
+    <div>
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}

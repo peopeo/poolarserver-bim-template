@@ -366,13 +366,28 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           onCameraChange={() => controls?.update()}
         />
 
-        {/* Model URL Input */}
-        <ModelUrlInput
-          onLoadUrl={handleLoadModelUrl}
-          isLoading={loadStatus === 'loading'}
-          error={modelLoadError}
-          darkMode={darkMode}
-        />
+        {/* Top-right controls stack */}
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+          {/* Export Panel */}
+          <div>
+            <ExportPanel
+              onExport={handleExport}
+              onExportOrthographic={handleExportOrthographic}
+              lastExportInfo={lastExportInfo}
+              darkMode={darkMode}
+            />
+          </div>
+
+          {/* Model URL Input */}
+          <div>
+            <ModelUrlInput
+              onLoadUrl={handleLoadModelUrl}
+              isLoading={loadStatus === 'loading'}
+              error={modelLoadError}
+              darkMode={darkMode}
+            />
+          </div>
+        </div>
 
         {/* Filter Panel */}
         <FilterPanel
@@ -400,14 +415,6 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         <PropertyPanel
           element={selectedElement}
           onClose={clearSelection}
-          darkMode={darkMode}
-        />
-
-        {/* Export Panel */}
-        <ExportPanel
-          onExport={handleExport}
-          onExportOrthographic={handleExportOrthographic}
-          lastExportInfo={lastExportInfo}
           darkMode={darkMode}
         />
       </div>

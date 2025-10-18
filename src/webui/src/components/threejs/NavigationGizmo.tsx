@@ -198,7 +198,7 @@ export const NavigationGizmo: React.FC<NavigationGizmoProps> = ({
       ref={containerRef}
       style={{
         position: 'absolute',
-        top: '20px',
+        bottom: '20px',
         right: '20px',
         width: `${gizmoSize}px`,
         height: `${gizmoSize}px`,
