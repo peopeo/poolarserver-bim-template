@@ -8,9 +8,10 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel } from '../../components/threejs';
-import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager } from '../../services/threejs';
-import type { ClippingPlaneConfig } from '../../services/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel } from '../../components/threejs';
+import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
+import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
+import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import type { FilterCriteria, FilterResult } from '../../types/threejs';
 import * as THREE from 'three';
@@ -26,10 +27,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const modelLoaderRef = useRef<ModelLoader>(new ModelLoader());
   const filterManagerRef = useRef<FilterManager>(new FilterManager());
   const clippingManagerRef = useRef<ClippingPlaneManager>(new ClippingPlaneManager());
+  const exportManagerRef = useRef<ExportManager>(new ExportManager());
   const [loadedModel, setLoadedModel] = useState<THREE.Group | null>(null);
   const [filterResult, setFilterResult] = useState<FilterResult | null>(null);
   const [activePlanes, setActivePlanes] = useState<Array<{ id: string; position: THREE.Vector3; normal: THREE.Vector3; enabled: boolean }>>([]);
   const [planeIdCounter, setPlaneIdCounter] = useState(0);
+  const [lastExportInfo, setLastExportInfo] = useState<{ width: number; height: number; size: number; timestamp: Date } | undefined>();
 
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
@@ -54,11 +57,16 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     if (scene) {
       filterManagerRef.current.setScene(scene);
       clippingManagerRef.current.setScene(scene);
+      exportManagerRef.current.setScene(scene);
     }
     if (renderer) {
       clippingManagerRef.current.setRenderer(renderer);
+      exportManagerRef.current.setRenderer(renderer);
     }
-  }, [scene, renderer]);
+    if (camera) {
+      exportManagerRef.current.setCamera(camera);
+    }
+  }, [scene, renderer, camera]);
 
   const handleFilterApply = (criteria: FilterCriteria) => {
     const result = filterManagerRef.current.applyFilter(criteria);
@@ -244,6 +252,55 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     }
   };
 
+  // Export handlers
+  const handleExport = async (options: ExportOptionsUI) => {
+    try {
+      const result = await exportManagerRef.current.exportAndDownload({
+        ...options,
+        backgroundColor: darkMode ? '#1a1a1a' : '#f0f0f0'
+      });
+
+      setLastExportInfo({
+        width: result.width,
+        height: result.height,
+        size: result.size,
+        timestamp: result.timestamp
+      });
+
+      console.log(`Exported image: ${result.width}×${result.height}, ${(result.size / 1024).toFixed(2)} KB`);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
+  const handleExportOrthographic = async (axis: 'x' | 'y' | 'z', options: ExportOptionsUI) => {
+    try {
+      const result = await exportManagerRef.current.exportOrthographic(axis, {
+        ...options,
+        backgroundColor: darkMode ? '#1a1a1a' : '#f0f0f0'
+      });
+
+      // Download the image
+      const link = document.createElement('a');
+      link.href = result.dataUrl;
+      link.download = options.filename || `export-${axis}-${Date.now()}.${options.format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setLastExportInfo({
+        width: result.width,
+        height: result.height,
+        size: result.size,
+        timestamp: result.timestamp
+      });
+
+      console.log(`Exported ${axis} orthographic view: ${result.width}×${result.height}, ${(result.size / 1024).toFixed(2)} KB`);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -309,6 +366,14 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         <PropertyPanel
           element={selectedElement}
           onClose={clearSelection}
+          darkMode={darkMode}
+        />
+
+        {/* Export Panel */}
+        <ExportPanel
+          onExport={handleExport}
+          onExportOrthographic={handleExportOrthographic}
+          lastExportInfo={lastExportInfo}
           darkMode={darkMode}
         />
       </div>
