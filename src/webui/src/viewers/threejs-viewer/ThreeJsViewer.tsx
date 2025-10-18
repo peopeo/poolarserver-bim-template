@@ -7,6 +7,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
+import { useSelection } from '../../hooks/threejs/useSelection';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import * as THREE from 'three';
@@ -33,6 +34,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   });
 
   const { loadModel, status: loadStatus, progress, statusMessage, modelResult } = useModelLoader();
+
+  const { selectedElement, selectedObject, clearSelection, hasSelection } = useSelection({
+    scene,
+    camera,
+    canvasId
+  });
 
   // Load model when scene is ready
   useEffect(() => {
@@ -159,6 +166,8 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
             ? 'text-blue-500 animate-pulse'
             : sceneError
             ? 'text-red-500'
+            : hasSelection
+            ? 'text-green-500'
             : 'text-gray-500'
         }`}>
           {sceneError
@@ -167,8 +176,10 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
             ? 'Initializing viewer...'
             : loadStatus === 'loading'
             ? `${statusMessage}`
+            : hasSelection && selectedElement
+            ? `Selected: ${selectedElement.type}${selectedElement.name ? ' - ' + selectedElement.name : ''}`
             : loadStatus === 'loaded'
-            ? `Model loaded - ${mockMetadata.elements.length} BIM elements`
+            ? `Model loaded - ${mockMetadata.elements.length} BIM elements (click to select)`
             : 'Ready'}
         </p>
       </div>
