@@ -8,8 +8,9 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel } from '../../components/threejs';
-import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager } from '../../services/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel } from '../../components/threejs';
+import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager } from '../../services/threejs';
+import type { ClippingPlaneConfig } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import type { FilterCriteria, FilterResult } from '../../types/threejs';
 import * as THREE from 'three';
@@ -24,8 +25,11 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelLoaderRef = useRef<ModelLoader>(new ModelLoader());
   const filterManagerRef = useRef<FilterManager>(new FilterManager());
+  const clippingManagerRef = useRef<ClippingPlaneManager>(new ClippingPlaneManager());
   const [loadedModel, setLoadedModel] = useState<THREE.Group | null>(null);
   const [filterResult, setFilterResult] = useState<FilterResult | null>(null);
+  const [activePlanes, setActivePlanes] = useState<Array<{ id: string; position: THREE.Vector3; normal: THREE.Vector3; enabled: boolean }>>([]);
+  const [planeIdCounter, setPlaneIdCounter] = useState(0);
 
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
@@ -45,12 +49,16 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     canvasId
   });
 
-  // Set scene in filter manager when ready
+  // Set scene and renderer in managers when ready
   useEffect(() => {
     if (scene) {
       filterManagerRef.current.setScene(scene);
+      clippingManagerRef.current.setScene(scene);
     }
-  }, [scene]);
+    if (renderer) {
+      clippingManagerRef.current.setRenderer(renderer);
+    }
+  }, [scene, renderer]);
 
   const handleFilterApply = (criteria: FilterCriteria) => {
     const result = filterManagerRef.current.applyFilter(criteria);
@@ -176,6 +184,66 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     }
   };
 
+  // Clipping plane handlers
+  const handleAddPreset = (preset: 'x' | 'y' | 'z' | '-x' | '-y' | '-z', offset: number) => {
+    const id = `plane-${planeIdCounter}`;
+    setPlaneIdCounter(planeIdCounter + 1);
+
+    const result = clippingManagerRef.current.createPresetPlane(id, preset, offset);
+
+    setActivePlanes(prev => [...prev, {
+      id: result.config.id,
+      position: result.config.position.clone(),
+      normal: result.config.normal.clone(),
+      enabled: result.config.enabled
+    }]);
+
+    console.log(`Added clipping plane: ${id} (${preset}, offset: ${offset})`);
+  };
+
+  const handleAddCustom = (config: ClippingPlaneConfig) => {
+    const result = clippingManagerRef.current.addPlane(config);
+
+    setActivePlanes(prev => [...prev, {
+      id: result.config.id,
+      position: result.config.position.clone(),
+      normal: result.config.normal.clone(),
+      enabled: result.config.enabled
+    }]);
+
+    console.log(`Added custom clipping plane: ${config.id}`);
+  };
+
+  const handleRemovePlane = (id: string) => {
+    const success = clippingManagerRef.current.removePlane(id);
+    if (success) {
+      setActivePlanes(prev => prev.filter(p => p.id !== id));
+      console.log(`Removed clipping plane: ${id}`);
+    }
+  };
+
+  const handleTogglePlaneEnabled = (id: string, enabled: boolean) => {
+    const success = clippingManagerRef.current.setPlaneEnabled(id, enabled);
+    if (success) {
+      setActivePlanes(prev => prev.map(p => p.id === id ? { ...p, enabled } : p));
+      console.log(`Toggled clipping plane ${id}: ${enabled ? 'enabled' : 'disabled'}`);
+    }
+  };
+
+  const handleUpdatePlanePosition = (id: string, position: THREE.Vector3) => {
+    const success = clippingManagerRef.current.updatePlanePosition(id, position);
+    if (success) {
+      setActivePlanes(prev => prev.map(p => p.id === id ? { ...p, position: position.clone() } : p));
+    }
+  };
+
+  const handleUpdatePlaneNormal = (id: string, normal: THREE.Vector3) => {
+    const success = clippingManagerRef.current.updatePlaneNormal(id, normal);
+    if (success) {
+      setActivePlanes(prev => prev.map(p => p.id === id ? { ...p, normal: normal.clone() } : p));
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -222,6 +290,18 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           onFilterReset={handleFilterReset}
           matchCount={filterResult?.matchCount}
           totalCount={filterResult?.totalCount || mockMetadata.elements.length}
+          darkMode={darkMode}
+        />
+
+        {/* Clipping Panel */}
+        <ClippingPanel
+          onAddPreset={handleAddPreset}
+          onAddCustom={handleAddCustom}
+          onRemove={handleRemovePlane}
+          onToggleEnabled={handleTogglePlaneEnabled}
+          onUpdatePosition={handleUpdatePlanePosition}
+          onUpdateNormal={handleUpdatePlaneNormal}
+          activePlanes={activePlanes}
           darkMode={darkMode}
         />
 
