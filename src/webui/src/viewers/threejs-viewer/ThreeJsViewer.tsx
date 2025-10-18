@@ -8,7 +8,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel } from '../../components/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput } from '../../components/threejs';
 import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
@@ -33,6 +33,8 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [activePlanes, setActivePlanes] = useState<Array<{ id: string; position: THREE.Vector3; normal: THREE.Vector3; enabled: boolean }>>([]);
   const [planeIdCounter, setPlaneIdCounter] = useState(0);
   const [lastExportInfo, setLastExportInfo] = useState<{ width: number; height: number; size: number; timestamp: Date } | undefined>();
+  const [currentModelUrl, setCurrentModelUrl] = useState<string>(MOCK_GLTF_URL_ONLINE);
+  const [modelLoadError, setModelLoadError] = useState<string | undefined>();
 
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
@@ -80,14 +82,22 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     console.log('Filter reset');
   };
 
-  // Load model when scene is ready
+  // Load model when scene is ready or URL changes
   useEffect(() => {
     if (!scene || !camera || !controls) return;
-    if (loadedModel) return; // Already loaded
 
     const loadGltfModel = async () => {
       try {
-        const result = await loadModel(MOCK_GLTF_URL_ONLINE, mockMetadata);
+        setModelLoadError(undefined);
+
+        // Remove old model if exists
+        if (loadedModel) {
+          scene.remove(loadedModel);
+          modelLoaderRef.current.disposeModel(loadedModel);
+          setLoadedModel(null);
+        }
+
+        const result = await loadModel(currentModelUrl, mockMetadata);
 
         if (result && result.model) {
           // Add model to scene
@@ -106,10 +116,13 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           controls.target.copy(center);
           controls.update();
 
-          console.log(`Model loaded with ${mockMetadata.elements.length} BIM elements`);
+          console.log(`Model loaded from: ${currentModelUrl}`);
+          console.log(`Attached ${mockMetadata.elements.length} BIM elements metadata`);
         }
       } catch (err) {
         console.error('Error loading model:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load model';
+        setModelLoadError(errorMsg);
       }
     };
 
@@ -124,7 +137,7 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene, camera, controls]);
+  }, [scene, camera, controls, currentModelUrl]);
 
   // Handle resize
   useEffect(() => {
@@ -252,6 +265,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     }
   };
 
+  // Model URL handler
+  const handleLoadModelUrl = (url: string) => {
+    console.log(`Loading model from URL: ${url}`);
+    setCurrentModelUrl(url);
+  };
+
   // Export handlers
   const handleExport = async (options: ExportOptionsUI) => {
     try {
@@ -338,6 +357,14 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           id={canvasId}
           className="absolute inset-0 w-full h-full"
           style={{ touchAction: 'none' }}
+        />
+
+        {/* Model URL Input */}
+        <ModelUrlInput
+          onLoadUrl={handleLoadModelUrl}
+          isLoading={loadStatus === 'loading'}
+          error={modelLoadError}
+          darkMode={darkMode}
         />
 
         {/* Filter Panel */}
