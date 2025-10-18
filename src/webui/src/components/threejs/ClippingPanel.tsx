@@ -70,7 +70,7 @@ export function ClippingPanel({
   };
 
   return (
-    <div className="absolute top-20 left-4 z-10">
+    <div>
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
@@ -89,7 +89,7 @@ export function ClippingPanel({
         </button>
       ) : (
         <div
-          className={`w-80 rounded-lg shadow-xl border ${
+          className={`absolute top-full right-0 mt-2 w-80 rounded-lg shadow-xl border ${
             darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
           }`}
         >

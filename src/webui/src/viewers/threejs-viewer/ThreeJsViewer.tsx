@@ -362,40 +362,48 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-2 ml-4">
-          <ExportPanel
-            onExport={handleExport}
-            onExportOrthographic={handleExportOrthographic}
-            lastExportInfo={lastExportInfo}
-            darkMode={darkMode}
-          />
+        <div className="flex items-center gap-2 ml-4 relative">
+          <div className="relative z-50">
+            <ExportPanel
+              onExport={handleExport}
+              onExportOrthographic={handleExportOrthographic}
+              lastExportInfo={lastExportInfo}
+              darkMode={darkMode}
+            />
+          </div>
 
-          <ModelUrlInput
-            onLoadUrl={handleLoadModelUrl}
-            isLoading={loadStatus === 'loading'}
-            error={modelLoadError}
-            darkMode={darkMode}
-          />
+          <div className="relative z-50">
+            <ModelUrlInput
+              onLoadUrl={handleLoadModelUrl}
+              isLoading={loadStatus === 'loading'}
+              error={modelLoadError}
+              darkMode={darkMode}
+            />
+          </div>
 
-          <FilterPanel
-            availableTypes={mockMetadata.types}
-            onFilterApply={handleFilterApply}
-            onFilterReset={handleFilterReset}
-            matchCount={filterResult?.matchCount}
-            totalCount={filterResult?.totalCount || mockMetadata.elements.length}
-            darkMode={darkMode}
-          />
+          <div className="relative z-50">
+            <FilterPanel
+              availableTypes={mockMetadata.types}
+              onFilterApply={handleFilterApply}
+              onFilterReset={handleFilterReset}
+              matchCount={filterResult?.matchCount}
+              totalCount={filterResult?.totalCount || mockMetadata.elements.length}
+              darkMode={darkMode}
+            />
+          </div>
 
-          <ClippingPanel
-            onAddPreset={handleAddPreset}
-            onAddCustom={handleAddCustom}
-            onRemove={handleRemovePlane}
-            onToggleEnabled={handleTogglePlaneEnabled}
-            onUpdatePosition={handleUpdatePlanePosition}
-            onUpdateNormal={handleUpdatePlaneNormal}
-            activePlanes={activePlanes}
-            darkMode={darkMode}
-          />
+          <div className="relative z-50">
+            <ClippingPanel
+              onAddPreset={handleAddPreset}
+              onAddCustom={handleAddCustom}
+              onRemove={handleRemovePlane}
+              onToggleEnabled={handleTogglePlaneEnabled}
+              onUpdatePosition={handleUpdatePlanePosition}
+              onUpdateNormal={handleUpdatePlaneNormal}
+              activePlanes={activePlanes}
+              darkMode={darkMode}
+            />
+          </div>
         </div>
       </div>
 
