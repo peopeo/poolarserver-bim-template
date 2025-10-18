@@ -234,16 +234,13 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       setError(err instanceof Error ? err.message : 'Unknown error');
       setIsLoading(false);
     }
-  }, [canvasId, antialias, transparent, backgroundColor, showGrid, gridSize, autoResize]);
+  }, [canvasId, antialias, transparent, showGrid, gridSize, autoResize]);
 
   // Update scene background when backgroundColor changes
   useEffect(() => {
     if (!sceneRef.current || transparent) return;
 
-    const newColor = new THREE.Color(backgroundColor);
-    sceneRef.current.background = newColor;
-
-    console.log('Scene background updated to:', backgroundColor, newColor);
+    sceneRef.current.background = new THREE.Color(backgroundColor);
   }, [backgroundColor, transparent]);
 
   return {

@@ -38,11 +38,6 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
 
   const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
 
-  // Debug: log when darkMode/backgroundColor changes
-  useEffect(() => {
-    console.log('ThreeJsViewer: darkMode changed to', darkMode, 'backgroundColor:', backgroundColor);
-  }, [darkMode, backgroundColor]);
-
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
     antialias: true,
