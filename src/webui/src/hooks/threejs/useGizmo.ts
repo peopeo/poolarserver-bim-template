@@ -39,7 +39,6 @@ export const useGizmo = ({ camera, target = new THREE.Vector3(0, 0, 0), onCamera
         new THREE.CylinderGeometry(0.02, 0.02, 0.7, 16),
         new THREE.MeshBasicMaterial({
           color: color,
-          emissive: new THREE.Color(0x000000),
         })
       );
       shaft.position.y = 0.35;
@@ -50,7 +49,6 @@ export const useGizmo = ({ camera, target = new THREE.Vector3(0, 0, 0), onCamera
         new THREE.ConeGeometry(0.06, 0.15, 16),
         new THREE.MeshBasicMaterial({
           color: color,
-          emissive: new THREE.Color(0x000000),
         })
       );
       tip.position.y = 0.775;
@@ -213,24 +211,34 @@ export const useGizmo = ({ camera, target = new THREE.Vector3(0, 0, 0), onCamera
 
   // Highlight axis on hover
   const highlightAxis = (axis: THREE.Group | null) => {
-    // Reset all highlights
+    // Reset all highlights by restoring original colors
     allAxesRef.current.forEach((ax) => {
       ax.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
-          if (child.material.emissive) {
-            child.material.emissive.setHex(0x000000);
+          // Restore original color based on parent's userData
+          if (ax.userData.axis === 'X' || ax.userData.axis === '-X') {
+            child.material.color.setHex(ax.userData.axis === 'X' ? 0xff0000 : 0x660000);
+          } else if (ax.userData.axis === 'Y' || ax.userData.axis === '-Y') {
+            child.material.color.setHex(ax.userData.axis === 'Y' ? 0x00ff00 : 0x006600);
+          } else if (ax.userData.axis === 'Z' || ax.userData.axis === '-Z') {
+            child.material.color.setHex(ax.userData.axis === 'Z' ? 0x0000ff : 0x000066);
           }
+          child.material.needsUpdate = true;
         }
       });
     });
 
-    // Highlight hovered axis
+    // Highlight hovered axis by brightening it
     if (axis) {
       axis.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
-          if (child.material.emissive) {
-            child.material.emissive.setHex(0x555555);
-          }
+          const currentColor = child.material.color.getHex();
+          // Brighten the color
+          const r = Math.min(1, ((currentColor >> 16) & 255) / 255 + 0.3);
+          const g = Math.min(1, ((currentColor >> 8) & 255) / 255 + 0.3);
+          const b = Math.min(1, (currentColor & 255) / 255 + 0.3);
+          child.material.color.setRGB(r, g, b);
+          child.material.needsUpdate = true;
         }
       });
     }
