@@ -238,9 +238,12 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
 
   // Update scene background when backgroundColor changes
   useEffect(() => {
-    if (sceneRef.current && !transparent) {
-      sceneRef.current.background = new THREE.Color(backgroundColor);
-    }
+    if (!sceneRef.current || transparent) return;
+
+    const newColor = new THREE.Color(backgroundColor);
+    sceneRef.current.background = newColor;
+
+    console.log('Scene background updated to:', backgroundColor, newColor);
   }, [backgroundColor, transparent]);
 
   return {

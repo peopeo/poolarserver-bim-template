@@ -36,11 +36,18 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [currentModelUrl, setCurrentModelUrl] = useState<string>(MOCK_GLTF_URL_ONLINE);
   const [modelLoadError, setModelLoadError] = useState<string | undefined>();
 
+  const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
+
+  // Debug: log when darkMode/backgroundColor changes
+  useEffect(() => {
+    console.log('ThreeJsViewer: darkMode changed to', darkMode, 'backgroundColor:', backgroundColor);
+  }, [darkMode, backgroundColor]);
+
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
     antialias: true,
     transparent: false,
-    backgroundColor: darkMode ? '#1a1a1a' : '#f0f0f0',
+    backgroundColor,
     showGrid: true,
     gridSize: 50,
     autoResize: true
