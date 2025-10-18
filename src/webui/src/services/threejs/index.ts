@@ -31,3 +31,6 @@ export type { ModelLoadProgress, ModelLoadResult } from './ModelLoader';
 // Selection manager
 export { SelectionManager } from './SelectionManager';
 export type { SelectionResult } from './SelectionManager';
+
+// Filter manager
+export { FilterManager } from './FilterManager';

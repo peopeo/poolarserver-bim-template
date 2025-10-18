@@ -8,9 +8,10 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel } from '../../components/threejs';
-import { mockMetadata, MOCK_GLTF_URL_ONLINE } from '../../services/threejs';
+import { PropertyPanel, FilterPanel } from '../../components/threejs';
+import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
+import type { FilterCriteria, FilterResult } from '../../types/threejs';
 import * as THREE from 'three';
 
 interface ThreeJsViewerProps {
@@ -22,7 +23,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const canvasId = 'threejs-canvas';
   const containerRef = useRef<HTMLDivElement>(null);
   const modelLoaderRef = useRef<ModelLoader>(new ModelLoader());
+  const filterManagerRef = useRef<FilterManager>(new FilterManager());
   const [loadedModel, setLoadedModel] = useState<THREE.Group | null>(null);
+  const [filterResult, setFilterResult] = useState<FilterResult | null>(null);
 
   const { scene, camera, renderer, controls, isLoading: sceneLoading, error: sceneError } = useThreeScene({
     canvasId,
@@ -41,6 +44,25 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     camera,
     canvasId
   });
+
+  // Set scene in filter manager when ready
+  useEffect(() => {
+    if (scene) {
+      filterManagerRef.current.setScene(scene);
+    }
+  }, [scene]);
+
+  const handleFilterApply = (criteria: FilterCriteria) => {
+    const result = filterManagerRef.current.applyFilter(criteria);
+    setFilterResult(result);
+    console.log('Filter applied:', result);
+  };
+
+  const handleFilterReset = () => {
+    const result = filterManagerRef.current.resetFilter();
+    setFilterResult(null);
+    console.log('Filter reset');
+  };
 
   // Load model when scene is ready
   useEffect(() => {
@@ -191,6 +213,16 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           id={canvasId}
           className="absolute inset-0 w-full h-full"
           style={{ touchAction: 'none' }}
+        />
+
+        {/* Filter Panel */}
+        <FilterPanel
+          availableTypes={mockMetadata.types}
+          onFilterApply={handleFilterApply}
+          onFilterReset={handleFilterReset}
+          matchCount={filterResult?.matchCount}
+          totalCount={filterResult?.totalCount || mockMetadata.elements.length}
+          darkMode={darkMode}
         />
 
         {/* Property Panel */}
