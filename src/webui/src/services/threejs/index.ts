@@ -38,3 +38,7 @@ export { FilterManager } from './FilterManager';
 // Clipping plane manager
 export { ClippingPlaneManager } from './ClippingPlaneManager';
 export type { ClippingPlaneConfig, ClippingPlaneResult } from './ClippingPlaneManager';
+
+// Export manager
+export { ExportManager } from './ExportManager';
+export type { ExportOptions, ExportResult } from './ExportManager';
