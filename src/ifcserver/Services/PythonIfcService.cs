@@ -177,5 +177,65 @@ namespace ifcserver.Services
                 throw new InvalidOperationException($"Failed to export IFC to glTF: {ex.Message}", ex);
             }
         }
+
+        /// <summary>
+        /// Extracts properties from an IFC element using the Python extract_properties.py script.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <param name="elementGuid">GlobalId (GUID) of the element</param>
+        /// <returns>IfcElementProperties object</returns>
+        /// <exception cref="FileNotFoundException">If IFC file doesn't exist</exception>
+        /// <exception cref="InvalidOperationException">If Python script fails</exception>
+        public async Task<IfcElementProperties> ExtractPropertiesAsync(string ifcFilePath, string elementGuid)
+        {
+            // Validate input file exists
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            _logger.LogInformation($"Extracting properties for element: {elementGuid} from {ifcFilePath}");
+
+            try
+            {
+                // Build path to extract_properties.py script
+                var scriptPath = Path.Combine(_pythonScriptsPath, "extract_properties.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                // Build arguments for Python script
+                var arguments = $"\"{scriptPath}\" \"{ifcFilePath}\" \"{elementGuid}\"";
+
+                // Run Python script via ProcessRunner
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                _logger.LogDebug($"Python output: {jsonOutput}");
+
+                // Deserialize JSON output to IfcElementProperties
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var properties = JsonSerializer.Deserialize<IfcElementProperties>(jsonOutput, jsonOptions);
+
+                if (properties == null)
+                {
+                    throw new InvalidOperationException("Failed to deserialize element properties from Python output");
+                }
+
+                _logger.LogInformation($"Successfully extracted properties for element: {elementGuid}");
+
+                return properties;
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to extract properties: {elementGuid}");
+                throw new InvalidOperationException($"Failed to extract properties: {ex.Message}", ex);
+            }
+        }
     }
 }

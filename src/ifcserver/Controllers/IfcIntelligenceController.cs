@@ -216,6 +216,88 @@ public class IfcIntelligenceController : ControllerBase
     }
 
     /// <summary>
+    /// Extract properties from an IFC element by GlobalId.
+    /// </summary>
+    /// <param name="file">IFC file to extract properties from (multipart/form-data upload)</param>
+    /// <param name="elementGuid">GlobalId (GUID) of the element</param>
+    /// <returns>IfcElementProperties JSON object</returns>
+    /// <response code="200">Successfully extracted properties</response>
+    /// <response code="400">Invalid file or bad request</response>
+    /// <response code="500">Server error during extraction</response>
+    [HttpPost("extract-properties")]
+    [ProducesResponseType(typeof(IfcElementProperties), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ExtractProperties(
+        IFormFile file,
+        [FromForm] string elementGuid)
+    {
+        _logger.LogInformation("ExtractProperties endpoint called");
+
+        // Validate file
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { error = "No file uploaded" });
+        }
+
+        // Validate file extension
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".ifc")
+        {
+            return BadRequest(new { error = "Only .ifc files are supported" });
+        }
+
+        // Validate elementGuid
+        if (string.IsNullOrWhiteSpace(elementGuid))
+        {
+            return BadRequest(new { error = "elementGuid parameter is required" });
+        }
+
+        _logger.LogInformation($"Received file: {file.FileName} ({file.Length} bytes), elementGuid: {elementGuid}");
+
+        try
+        {
+            // Create temp directory for uploaded file
+            var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
+            Directory.CreateDirectory(tempDir);
+
+            // Save uploaded file to temp location
+            var tempFilePath = Path.Combine(tempDir, $"{Guid.NewGuid()}.ifc");
+
+            using (var stream = new FileStream(tempFilePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            _logger.LogInformation($"Saved temp file: {tempFilePath}");
+
+            try
+            {
+                // Call Python service to extract properties
+                var properties = await _pythonIfcService.ExtractPropertiesAsync(tempFilePath, elementGuid);
+
+                _logger.LogInformation($"Successfully extracted properties for element: {elementGuid}");
+
+                return Ok(properties);
+            }
+            finally
+            {
+                // Cleanup temp file
+                if (System.IO.File.Exists(tempFilePath))
+                {
+                    System.IO.File.Delete(tempFilePath);
+                    _logger.LogDebug($"Deleted temp file: {tempFilePath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting properties");
+            return StatusCode(500, new { error = $"Failed to extract properties: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint for IFC Intelligence service.
     /// </summary>
     /// <returns>Service status</returns>
@@ -231,7 +313,8 @@ public class IfcIntelligenceController : ControllerBase
             features = new[]
             {
                 "parse",
-                "export-gltf"
+                "export-gltf",
+                "extract-properties"
             }
         });
     }
