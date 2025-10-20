@@ -22,5 +22,13 @@ namespace ifcserver.Services
         /// <param name="options">Export options (format, use-names, etc.)</param>
         /// <returns>GltfExportResult with success status and file info</returns>
         Task<GltfExportResult> ExportGltfAsync(string ifcFilePath, string outputPath, GltfExportOptions? options = null);
+
+        /// <summary>
+        /// Extracts properties from an IFC element by GlobalId using Python IfcOpenShell.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <param name="elementGuid">GlobalId (GUID) of the element</param>
+        /// <returns>IfcElementProperties object with property data</returns>
+        Task<IfcElementProperties> ExtractPropertiesAsync(string ifcFilePath, string elementGuid);
     }
 }
