@@ -44,14 +44,17 @@ __license__ = "MIT"
 # Module imports
 from .parser import IfcParser
 from .models import IfcMetadata
+from .gltf_exporter import GltfExporter, GltfExportOptions, GltfExportResult
 
 # Future imports
 # from .spatial_tree import SpatialTreeExtractor
 # from .property_extractor import PropertyExtractor
-# from .gltf_exporter import GltfExporter
 # from .cache_manager import IfcCacheManager
 
 __all__ = [
     "IfcParser",
     "IfcMetadata",
+    "GltfExporter",
+    "GltfExportOptions",
+    "GltfExportResult",
 ]
