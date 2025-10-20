@@ -30,5 +30,13 @@ namespace ifcserver.Services
         /// <param name="elementGuid">GlobalId (GUID) of the element</param>
         /// <returns>IfcElementProperties object with property data</returns>
         Task<IfcElementProperties> ExtractPropertiesAsync(string ifcFilePath, string elementGuid);
+
+        /// <summary>
+        /// Extracts spatial hierarchy tree from an IFC file using Python IfcOpenShell.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <param name="flat">If true, returns flat list instead of tree structure</param>
+        /// <returns>SpatialNode tree or SpatialElementsList (if flat=true)</returns>
+        Task<object> ExtractSpatialTreeAsync(string ifcFilePath, bool flat = false);
     }
 }
