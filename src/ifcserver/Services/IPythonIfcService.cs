@@ -13,5 +13,14 @@ namespace ifcserver.Services
         /// <param name="ifcFilePath">Absolute path to the IFC file</param>
         /// <returns>IfcMetadata object with project info and entity counts</returns>
         Task<IfcMetadata> ParseIfcFileAsync(string ifcFilePath);
+
+        /// <summary>
+        /// Exports an IFC file to glTF/GLB format using Python IfcConvert.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <param name="outputPath">Absolute path for the output glTF/GLB file</param>
+        /// <param name="options">Export options (format, use-names, etc.)</param>
+        /// <returns>GltfExportResult with success status and file info</returns>
+        Task<GltfExportResult> ExportGltfAsync(string ifcFilePath, string outputPath, GltfExportOptions? options = null);
     }
 }
