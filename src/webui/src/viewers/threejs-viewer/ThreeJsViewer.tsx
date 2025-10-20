@@ -8,12 +8,13 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput, NavigationGizmo } from '../../components/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput, NavigationGizmo, ModelBrowserPanel, SpatialTreePanel } from '../../components/threejs';
 import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
-import type { FilterCriteria, FilterResult } from '../../types/threejs';
+import type { FilterCriteria, FilterResult, BIMMetadata } from '../../types/threejs';
+import { getStoredModelGltfUrl, getStoredModel } from '../../services/api/ifcIntelligenceApi';
 import * as THREE from 'three';
 
 interface ThreeJsViewerProps {
@@ -36,6 +37,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [currentModelUrl, setCurrentModelUrl] = useState<string>(MOCK_GLTF_URL_ONLINE);
   const [modelLoadError, setModelLoadError] = useState<string | undefined>();
   const [initialCameraState, setInitialCameraState] = useState<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const [loadStartTime, setLoadStartTime] = useState<number | null>(null);
+  const [lastLoadTime, setLastLoadTime] = useState<number | null>(null);
+  const [lastRenderTime, setLastRenderTime] = useState<number | null>(null);
+  const [currentModelName, setCurrentModelName] = useState<string>('');
+  const [currentModelId, setCurrentModelId] = useState<number | null>(null);
+  const [currentMetadata, setCurrentMetadata] = useState<BIMMetadata>(mockMetadata);
 
   const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
 
@@ -92,6 +99,12 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     const loadGltfModel = async () => {
       try {
         setModelLoadError(undefined);
+        setLastLoadTime(null);
+        setLastRenderTime(null);
+
+        // Start timing
+        const startTime = performance.now();
+        setLoadStartTime(startTime);
 
         // Remove old model if exists
         if (loadedModel) {
@@ -100,14 +113,83 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           setLoadedModel(null);
         }
 
-        const result = await loadModel(currentModelUrl, mockMetadata);
+        // Determine metadata to use
+        let metadata = mockMetadata;
+
+        // If loading from database, fetch actual model metadata
+        if (currentModelId !== null) {
+          try {
+            const modelDetails = await getStoredModel(currentModelId);
+
+            // Create BIM metadata from database model
+            const elementCount = modelDetails.entityCounts
+              ? Object.values(modelDetails.entityCounts).reduce((a, b) => a + b, 0)
+              : 0;
+
+            metadata = {
+              projectName: modelDetails.projectName || 'Unknown Project',
+              schema: modelDetails.schema || 'Unknown Schema',
+              elements: Array.from({ length: elementCount }, (_, i) => ({
+                id: `element-${i}`,
+                type: 'IfcElement',
+                name: undefined,
+                ifcGuid: undefined,
+                properties: {}
+              })),
+              types: modelDetails.entityCounts
+                ? Object.keys(modelDetails.entityCounts)
+                : [],
+              spatialHierarchy: modelDetails.spatialTree,
+              propertySets: [],
+              modelId: `db-${currentModelId}`
+            };
+
+            setCurrentMetadata(metadata);
+            console.log(`Loaded metadata for DB model: ${elementCount} elements`);
+            console.log(`Spatial tree available:`, !!modelDetails.spatialTree, modelDetails.spatialTree);
+          } catch (err) {
+            console.warn('Failed to fetch model metadata, using mock data:', err);
+            setCurrentMetadata(mockMetadata);
+          }
+        } else {
+          // URL-based model, use mock metadata
+          setCurrentMetadata(mockMetadata);
+        }
+
+        // Load model (download + parse glTF)
+        const result = await loadModel(currentModelUrl, metadata);
 
         if (result && result.model) {
+          // Calculate load time (download + parse)
+          const loadEndTime = performance.now();
+          const loadTimeMs = loadEndTime - startTime;
+          setLastLoadTime(loadTimeMs);
+
+          // Start render timing
+          const renderStartTime = performance.now();
+
           // Add model to scene
           scene.add(result.model);
           setLoadedModel(result.model);
 
-          // Center and fit camera
+          // Performance optimization for large models
+          const isLargeModel = metadata.elements.length > 1000;
+          let meshCount = 0;
+
+          result.model.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+              meshCount++;
+            }
+          });
+
+          if (isLargeModel) {
+            console.log(`Large model detected (${meshCount} meshes) - disabling shadows for better performance`);
+            renderer.shadowMap.enabled = false;
+          } else {
+            renderer.shadowMap.enabled = true;
+          }
+
+          // Center and fit camera (do this synchronously for correct initial view)
           const loader = modelLoaderRef.current;
           loader.centerModel(result.model);
 
@@ -125,13 +207,28 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
             target: center.clone()
           });
 
-          console.log(`Model loaded from: ${currentModelUrl}`);
-          console.log(`Attached ${mockMetadata.elements.length} BIM elements metadata`);
+          // Wait for next frame to ensure GPU buffers are uploaded and rendered
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const renderEndTime = performance.now();
+              const renderTimeMs = renderEndTime - renderStartTime;
+              setLastRenderTime(renderTimeMs);
+              setLoadStartTime(null);
+
+              const totalTimeMs = loadTimeMs + renderTimeMs;
+
+              console.log(`Model loaded from: ${currentModelUrl}`);
+              console.log(`Load time: ${(loadTimeMs / 1000).toFixed(3)}s | Render time: ${(renderTimeMs / 1000).toFixed(3)}s | Total: ${(totalTimeMs / 1000).toFixed(3)}s`);
+              console.log(`Attached ${metadata.elements.length} BIM elements metadata`);
+              console.log('✅ Viewer ready - controls responsive');
+            });
+          });
         }
       } catch (err) {
         console.error('Error loading model:', err);
         const errorMsg = err instanceof Error ? err.message : 'Failed to load model';
         setModelLoadError(errorMsg);
+        setLoadStartTime(null);
       }
     };
 
@@ -277,7 +374,21 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   // Model URL handler
   const handleLoadModelUrl = (url: string) => {
     console.log(`Loading model from URL: ${url}`);
+    // Extract filename from URL
+    const urlParts = url.split('/');
+    const filename = urlParts[urlParts.length - 1] || 'model';
+    setCurrentModelName(`URL: ${filename}`);
+    setCurrentModelId(null); // Clear model ID for URL-based loads
     setCurrentModelUrl(url);
+  };
+
+  // Database model handler
+  const handleLoadDatabaseModel = (id: number, fileName: string) => {
+    const gltfUrl = getStoredModelGltfUrl(id);
+    console.log(`Loading model from database: ${fileName} (ID: ${id})`);
+    setCurrentModelName(`DB: ${fileName}`);
+    setCurrentModelId(id); // Set model ID for database loads
+    setCurrentModelUrl(gltfUrl);
   };
 
   // Export handlers
@@ -352,11 +463,13 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
               : sceneLoading
               ? 'Initializing viewer...'
               : loadStatus === 'loading'
-              ? `${statusMessage}`
+              ? `${statusMessage}${currentModelName ? ` (${currentModelName})` : ''}`
               : hasSelection && selectedElement
               ? `Selected: ${selectedElement.type}${selectedElement.name ? ' - ' + selectedElement.name : ''}`
+              : loadStatus === 'loaded' && lastLoadTime !== null && lastRenderTime !== null
+              ? `Loaded: ${(lastLoadTime / 1000).toFixed(2)}s + Render: ${(lastRenderTime / 1000).toFixed(2)}s = ${((lastLoadTime + lastRenderTime) / 1000).toFixed(2)}s | ${currentMetadata.elements.length} elements${currentModelName ? ` - ${currentModelName}` : ''}`
               : loadStatus === 'loaded'
-              ? `Model loaded - ${mockMetadata.elements.length} BIM elements (click to select)`
+              ? `Model loaded - ${currentMetadata.elements.length} BIM elements (click to select)`
               : 'Ready'}
           </p>
         </div>
@@ -373,6 +486,14 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           </div>
 
           <div className="relative z-50">
+            <ModelBrowserPanel
+              onLoadModel={handleLoadDatabaseModel}
+              isLoading={loadStatus === 'loading'}
+              darkMode={darkMode}
+            />
+          </div>
+
+          <div className="relative z-50">
             <ModelUrlInput
               onLoadUrl={handleLoadModelUrl}
               isLoading={loadStatus === 'loading'}
@@ -383,11 +504,11 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
 
           <div className="relative z-50">
             <FilterPanel
-              availableTypes={mockMetadata.types}
+              availableTypes={currentMetadata.types}
               onFilterApply={handleFilterApply}
               onFilterReset={handleFilterReset}
               matchCount={filterResult?.matchCount}
-              totalCount={filterResult?.totalCount || mockMetadata.elements.length}
+              totalCount={filterResult?.totalCount || currentMetadata.elements.length}
               darkMode={darkMode}
             />
           </div>
@@ -413,6 +534,16 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           id={canvasId}
           className="absolute inset-0 w-full h-full"
           style={{ touchAction: 'none' }}
+        />
+
+        {/* Spatial Tree Panel (Left side) */}
+        <SpatialTreePanel
+          spatialTree={currentMetadata.spatialHierarchy || null}
+          onSelectNode={(node) => {
+            console.log('Selected spatial node:', node);
+            // TODO: Implement element highlighting in 3D view
+          }}
+          darkMode={darkMode}
         />
 
         {/* Navigation Gizmo */}

@@ -52,6 +52,12 @@ export interface BIMMetadata {
   /** Model name (e.g., "West Riverside Hospital - Architectural") */
   name?: string;
 
+  /** Project name from IFC */
+  projectName?: string;
+
+  /** IFC schema version */
+  schema?: string;
+
   /** Array of all elements in the model */
   elements: BIMElement[];
 
@@ -60,6 +66,9 @@ export interface BIMMetadata {
 
   /** List of all PropertySet names in the model */
   propertySets: string[];
+
+  /** Spatial hierarchy tree (Project → Building → Storey → Space) */
+  spatialHierarchy?: any; // Using 'any' for now to match SpatialNode from API
 
   /** Optional statistics about the model */
   statistics?: {
