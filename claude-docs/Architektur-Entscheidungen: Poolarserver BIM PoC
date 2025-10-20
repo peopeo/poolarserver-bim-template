@@ -1,0 +1,637 @@
+# Architektur-Entscheidungen: Poolarserver BIM PoC
+**Stand: 19. Oktober 2024**
+
+---
+
+## 1. Executive Summary
+
+### Projektziel
+Entwicklung eines modernen BIM-Viewers als Proof of Concept für Poolarserver, der als Fundament für die schrittweise Modernisierung der bestehenden xBIM-Lösung dient.
+
+### Kernentscheidung: Three.js statt xeokit
+- **Begründung:** xeokit AGPL-3.0 Lizenz + hohe kommerzielle Kosten
+- **Alternative:** Three.js (MIT-Lizenz, kostenfrei)
+- **Trade-off:** Mehr Entwicklungsaufwand vs. Lizenzfreiheit und volle Kontrolle
+
+### Strategische Inspiration: BlenderBIM/Bonsai
+- Bonsai-Code als konzeptuelle Inspiration für IFC-Intelligence
+- **NICHT** als direkter Code-Port (Bonsai ist Desktop-Tool, wir bauen Web-Service)
+- Übernahme bewährter Architektur-Patterns und IFC-Workflows
+
+---
+
+## 2. Drei-Schichten-Architektur
+
+### Layer 1: Python Backend (IFC Intelligence Service)
+
+**Kernkompetenz:** IFC-Domänen-Expertise
+
+**Verantwortlichkeiten:**
+- IFC-Parsing mit IfcOpenshell
+- Geometrie-Extraktion (glTF-Export)
+- Spatial Hierarchy Traversierung
+- Property Set Extraction
+- IFC-spezifische Berechnungen (Relationships, Quantities)
+- 2D-Schnittprojektionen (CAD-Logik)
+- Geometrie-Operationen (Boolean, LOD-Generierung)
+
+**Output:** Standardisierte JSON-Strukturen
+
+**Warum Python?**
+- IfcOpenshell ist die Reference Implementation
+- Bonsai hat jahrelange Entwicklung in IFC-Logik investiert
+- In C# neu schreiben = Monate Aufwand + Bug-Risiko
+
+**Endpunkte (intern, nur von .NET gerufen):**
+```
+POST /ifc/parse → Spatial Tree + Metadata
+POST /ifc/geometry/gltf → glTF Chunks  
+POST /ifc/section → 2D-Schnitt als SVG
+POST /ifc/query/relationships → Element-Beziehungen
+POST /ifc/quantities → Aggregierte Mengen
+```
+
+---
+
+### Layer 2: .NET Backend (Orchestration & Business Layer)
+
+**Kernkompetenz:** Anwendungs-Logik & Datenhaltung
+
+**Verantwortlichkeiten:**
+- **Orchestration:** Workflow-Steuerung zwischen Services
+- **Business-Logik jenseits IFC:** User-Management, Projects, Collaboration
+- **Caching & Performance:** Redis-Integration, PostgreSQL JSONB
+- **API Gateway:** Einheitliche REST-API für Frontend
+- **Datenpersistierung:** EF Core für relationale + JSONB-Daten
+
+**Was NICHT hier:**
+- ❌ IFC-Parsing (Python)
+- ❌ Geometrie-Berechnungen (Python)  
+- ❌ UI-State-Management (Frontend)
+- ❌ 3D-Rendering (Frontend)
+
+**Technologie:**
+- ASP.NET Core 9
+- Entity Framework Core
+- PostgreSQL 16+
+
+---
+
+### Layer 3: Frontend (User Experience & Visualisierung)
+
+**Kernkompetenz:** 3D-Rendering & Interaktion
+
+**Verantwortlichkeiten:**
+- Three.js Scene Management
+- User Interaction (Navigation, Selection)
+- Client-Side Filtering (sofortiges Feedback)
+- UI-State-Management
+- Daten-Präsentation (Properties, Trees, Tabellen)
+
+**Was NICHT hier:**
+- ❌ IFC-Logik
+- ❌ Server-side Berechnungen
+- ❌ Daten-Persistierung
+
+**Technologie:**
+- React 18+ mit TypeScript
+- Three.js (MIT-Lizenz)
+- Zustand (State Management)
+
+---
+
+## 3. Kritische Entscheidung: JSONB Pass-Through vs. C#-Models
+
+### Entscheidung: **JSONB Pass-Through (Hybrid-Ansatz)**
+
+**Begründung:**
+```
+Datenfluss OHNE C#-Objekte:
+Python → JSON → PostgreSQL JSONB → .NET durchreichen → Frontend
+
+Vorteile:
+✅ Keine doppelte Serialisierung (JSON→C#→JSON)
+✅ 20-30% Zeitersparnis bei Backend-Entwicklung
+✅ Schema-Flexibilität (Python ist Source of Truth)
+✅ Performance (Zero-Copy-Ansatz)
+✅ Wartbarkeit (weniger Code = weniger Bugs)
+```
+
+### Wann doch C#-Models?
+
+**Nur für:**
+- Relationale Daten: Users, Projects, Teams, Permissions
+- Business-Logic jenseits IFC (z.B. Approval-Workflows)
+- API-Dokumentation (minimale DTOs nur für Swagger)
+
+**NICHT für:**
+- IFC-Daten (bleibt JSONB)
+- Properties, Spatial Tree, Quantities
+
+### Hybrid-Schema:
+
+**Models-Tabelle (relational):**
+```
+- Id, Name, OwnerId, ProjectId, UploadedAt, Status
+- Navigation Properties → User, Project
+```
+
+**ModelData-Tabelle (JSONB):**
+```
+- ModelId (FK)
+- SpatialTreeJson (JSONB)
+- PropertiesJson (JSONB)  
+- MetadataJson (JSONB)
+- QuantitiesJson (JSONB)
+```
+
+---
+
+## 4. Entity Framework Core: Rolle und Grenzen
+
+### Was EF Core GUT kann:
+
+**A) Relationale Strukturen**
+- Users ↔ Projects ↔ Models
+- Permissions, Audit-Logs
+- Foreign Keys, Constraints
+
+**B) JSONB-Integration**
+- Speicherung von Python-Outputs
+- Einfache JSONB-Queries (Containment, Existence)
+- GIN-Indizes für Performance
+
+**C) Transaktionen**
+- Atomare Updates
+- Concurrent Access Handling
+
+### Was EF Core VERMEIDEN:
+
+**A) Komplexe JSONB-Queries**
+- Verschachtelte Path-Queries → Raw SQL
+- Aggregationen über JSONB → PostgreSQL direkt
+
+**B) IFC-Logik**
+- Kein IFC-Wissen in C# nachbauen
+- Delegiere an Python
+
+**C) Geometrie**
+- Keine 3D-Berechnungen in LINQ
+- Delegiere an Python oder Frontend
+
+### Empfohlene Query-Strategie:
+
+- **Einfach:** EF LINQ
+- **JSONB-Containment:** EF mit Raw SQL Fragments  
+- **Komplex:** Dapper oder direkte PostgreSQL-Commands
+
+---
+
+## 5. Redis-Integration: Die Turbo-Boost-Schicht
+
+### Einsatzzweck: Performance-Multiplikator
+
+**Performance-Impact:**
+```
+Operation                    | PostgreSQL | +Redis  | Speedup
+----------------------------|------------|---------|----------
+Property-Query (cached)      | 50-100ms   | 5-15ms  | 5-10x
+Spatial Tree                 | 100-200ms  | 10-30ms | 5-10x  
+Complex IFC-Query (cached)   | 2000ms     | 20-50ms | 40-100x
+```
+
+### Primary Use Cases:
+
+**1. Query-Result-Cache (Hauptzweck)**
+```
+Keys-Schema:
+"model:{modelId}:spatial-tree" → TTL: 24h
+"model:{modelId}:properties:{elementId}" → TTL: 12h
+"model:{modelId}:query:type:{IfcType}" → TTL: 1-6h
+"model:{modelId}:quantities:total" → TTL: 24h
+```
+
+**2. Async Job Queue (Background Processing)**
+```
+Upload-Flow:
+User → .NET → LPUSH Redis Queue → Return Job-ID
+Python Worker → RPOP Queue → Processing
+Frontend → Pollt Job-Status aus Redis
+```
+
+**3. Rate Limiting**
+```
+INCR "ratelimit:user:{userId}:minute"
+If > 60: Return 429 Too Many Requests
+TTL: 60s (auto-reset)
+```
+
+**4. Distributed Locking (bei Model-Updates)**
+```
+SET lock:model:X {token} NX EX 300
+Processing...
+DEL lock:model:X
+```
+
+### Cache-Invalidierungs-Strategie:
+
+**Empfohlen: Version-basiertes Caching**
+```
+Keys mit Version:
+"model:X:v5:spatial-tree"
+"model:X:v5:properties:123"
+
+Model-Update → Version 5→6
+Alte Keys verfallen via TTL
+Neue Keys werden befüllt
+```
+
+### Setup-Empfehlung:
+
+**PoC-Phase:**
+- Single Redis Instance (Docker)
+- Query-Result-Cache + Job-Queue
+- TTL-basierte Invalidierung
+
+**Production:**
+- Redis Cluster (3-6 Nodes) oder Managed Service
+- High Availability, Auto-Failover
+
+**Aufwand:**
+- PoC: 2-3 Tage (mit Claude Code)
+- Production: 5-8 Tage
+
+---
+
+## 6. IFC-File-Handling & Storage-Strategie
+
+### Problem: File-basierte Queries sind langsam
+
+**Naive Ansatz (VERMEIDEN):**
+```
+Jeder Request → ifcopenshell.open("model.ifc") → 2-30 Sekunden!
+```
+
+### Lösung: Hybrid Pre-Computed + Cache
+
+**Phase 1: Upload & Pre-Processing (einmalig)**
+```
+IFC-Upload
+  ↓
+Python-Service:
+  - ifcopenshell.open() EINMALIG
+  - Extrahiere Spatial Tree → JSON
+  - Extrahiere Properties → JSON  
+  - Extrahiere Quantities → JSON
+  - Generiere glTF
+  ↓
+Speichere in PostgreSQL JSONB
+Archiviere IFC-File (S3/Blob Storage)
+```
+
+**Phase 2: Query zur Laufzeit**
+```
+90% Queries: Aus PostgreSQL JSONB (schnell)
+10% Queries: Python-Service mit RAM-Cache (bei Bedarf)
+```
+
+**Phase 3: Python RAM-Cache**
+```
+LRU-Cache im Python-Service:
+- Max 10 Modelle im RAM
+- 24h TTL
+- Nur für komplexe IFC-Operationen
+```
+
+### Storage-Verteilung:
+
+**IFC-Original-Files:**
+- S3/Azure Blob Storage (archiviert)
+- NICHT in PostgreSQL (zu groß)
+
+**PostgreSQL JSONB:**
+- Spatial Tree, Properties, Quantities
+- GIN-Indizes für schnelle Queries
+
+**glTF/GLB-Files:**
+- Blob Storage oder CDN
+
+---
+
+## 7. Filterung: Verantwortlichkeiten-Matrix
+
+| Filter-Typ | Wo | Warum | Latenz |
+|------------|-----|-------|--------|
+| **Visuell** (z.B. "verstecke Fenster") | Frontend | Instant Feedback | <10ms |
+| **IFC-semantisch** (z.B. "LoadBearing=True") | Python Backend | IFC-Domänenwissen | 200-1000ms (1st), <50ms (cached) |
+| **Hybrid** (z.B. "meine Projekte mit >100 Wänden") | .NET Backend + JSONB | Relational + IFC | 50-200ms |
+
+### Filterungs-Flow:
+
+**Client-Side (sofort):**
+```
+User klickt Filter → Frontend State-Update → Three.js Visibility
+Keine Netzwerk-Latenz
+```
+
+**Server-Side (bei Bedarf):**
+```
+Frontend → .NET API
+  ↓
+Prüfe Redis Cache → HIT: Return
+  ↓ MISS
+PostgreSQL JSONB Query → Falls vorhanden: Return + Cache
+  ↓ Nicht ausreichend
+.NET → Python: IFC-Query → Cache Result → Return
+```
+
+---
+
+## 8. Bonsai-Inspiration: Feature-Roadmap
+
+### Quick Wins (Phase 1: 1-2 Wochen)
+
+**IFC Spatial Tree:**
+- Hierarchische Baumansicht (IfcProject → Site → Building → Storey)
+- Click → Kamera fliegt hin + Selektion
+- Toggle Visibility pro Ebene
+
+**Viewpoint-Sharing:**
+- URL mit Kamera-Position + Filter-State
+- Teilen von spezifischen Ansichten
+
+**Property-Panel-Verbesserung:**
+- Gruppierung nach PropertySets (wie Blender)
+- Suchfunktion, Collapsible Sections
+
+### Advanced Features (Phase 2: 3-4 Wochen)
+
+**On-Demand Geometry Loading:**
+- Nur sichtbare Stockwerke laden
+- Level-of-Detail für Performance
+
+**Intelligente 2D-Schnitte:**
+- Backend berechnet SVG/DXF (nicht nur PNG-Screenshot)
+- CAD-kompatible Exports
+
+**Measurement Tool:**
+- Distanz, Fläche, Volumen im Viewer
+- Interactive Gizmos (Blender-Style)
+
+### Kollaboration (Phase 3: später)
+
+**BCF-Support:**
+- BIM Collaboration Format
+- Issues/Kommentare im Modell
+- Viewpoint-Speicherung
+
+**Quantity Take-Off:**
+- Automatische Mengenermittlung
+- Filterung + Aggregation
+
+**IFC-Editing (langfristig):**
+- Einfache Property-Änderungen im Viewer
+- Backend schreibt zurück ins IFC
+
+---
+
+## 9. Aufwandsschätzungen
+
+### Backend-Pipeline: IFC Intelligence Service
+
+| Feature | Mit Claude Code | Ohne Claude Code | Zeitersparnis |
+|---------|----------------|------------------|---------------|
+| Spatial Hierarchy | 2-3 Tage | 6-8 Tage | ~50% |
+| Dynamic Property Queries | 3-4 Tage | 8-10 Tage | ~50% |
+| On-Demand Geometry (LOD) | 6-8 Tage | 12-15 Tage | ~45% |
+| 2D Section Cuts (SVG/DXF) | 8-10 Tage | 15-20 Tage | ~45% |
+| Relationship Queries | 5-6 Tage | 9-12 Tage | ~45% |
+| Quantity Take-Off | 4-5 Tage | 7-9 Tage | ~40% |
+| **GESAMT** | **28-36 Tage** | **57-74 Tage** | **~47%** |
+
+### Zusätzliche Aufwände:
+
+**EF Core Migrations:**
+- Mit Claude Code: 1 Tag
+- Ohne: 3-4 Tage
+
+**Redis-Integration:**
+- Mit Claude Code: 2-3 Tage
+- Ohne: 5-7 Tage
+
+**Python ↔ .NET Integration (HTTP):**
+- Mit Claude Code: 2 Tage
+- Ohne: 4 Tage
+
+---
+
+## 10. Technologie-Stack: Finale Übersicht
+
+### Backend
+
+**Python-Service:**
+- Python 3.11+
+- IfcOpenshell 0.7+
+- FastAPI oder Flask (für HTTP-Endpunkte)
+- Bonsai-Code als Inspiration (NICHT direkt kopiert)
+
+**.NET-Service:**
+- ASP.NET Core 9
+- Entity Framework Core 9
+- C# 12
+- StackExchange.Redis (Redis-Client)
+
+**Datenbank:**
+- PostgreSQL 16+
+- JSONB für IFC-Daten
+- GIN-Indizes
+
+**Cache:**
+- Redis 7+ (Single Instance → später Cluster)
+
+**Storage:**
+- Azure Blob Storage oder AWS S3 (IFC-Files, glTF)
+
+### Frontend
+
+**Core:**
+- React 18+
+- TypeScript 5+
+- Three.js r160+ (MIT-Lizenz)
+
+**State Management:**
+- Zustand 4+
+
+**UI (Optional):**
+- Tailwind CSS
+- Headless UI
+
+**3D-Features (selbst implementiert):**
+- Model Loading (GLTFLoader)
+- Navigation Gizmo (Blender-Style) ✅ Bereits umgesetzt
+- Clipping Planes
+- Selection & Highlighting
+- Property Display
+
+---
+
+## 11. Risiken & Mitigationen
+
+| Risiko | Wahrscheinlichkeit | Mitigation |
+|--------|-------------------|------------|
+| Performance bei großen Modellen | Mittel | On-Demand Loading, LOD, Redis-Caching |
+| Redis-Komplexität unterschätzt | Niedrig | Start mit Simple Cache, später erweitern |
+| IFC-File-Handling-Overhead | Mittel | Pre-Computed JSONB, Python RAM-Cache |
+| Cache-Invalidierung-Bugs | Mittel | Version-basiertes Caching, klare Strategie |
+| Python-Service-Skalierung | Niedrig | Horizontal skalieren via Load Balancer |
+
+---
+
+## 12. Nächste Schritte
+
+### Sofort (diese Woche):
+
+1. **Redis-Proof-of-Concept**
+   - Docker-Setup
+   - Basic Query-Cache implementieren
+   - Job-Queue für IFC-Upload
+
+2. **JSONB-Schema finalisieren**
+   - PostgreSQL-Migration erstellen
+   - GIN-Indizes definieren
+
+3. **Python-Service Basic-Setup**
+   - FastAPI-Skeleton
+   - IfcOpenshell-Integration
+   - Spatial Tree Extraction (erste Implementierung)
+
+### Diese Sprint (nächste 2 Wochen):
+
+4. **IFC-Upload-Pipeline**
+   - .NET → Python → PostgreSQL Flow
+   - Async Job mit Redis-Queue
+   - Status-Polling im Frontend
+
+5. **Spatial Tree Feature**
+   - Backend: Python extrahiert Hierarchy
+   - Frontend: Tree-View-Component
+   - Integration testen
+
+### Nächste Meilensteine:
+
+6. **Filterung MVP**
+   - Client-Side: Typ-basiert
+   - Server-Side: Property-basiert via JSONB
+
+7. **2D-Schnitt POC**
+   - Python: SVG-Export mit IfcOpenshell
+   - Frontend: Export-Button
+
+---
+
+## 13. Offene Entscheidungen
+
+**Noch zu klären:**
+
+1. **Python-Service-Deployment:**
+   - Docker Container (empfohlen)
+   - Oder: Azure Functions/AWS Lambda (serverless)?
+
+2. **Redis-Managed vs. Self-Hosted:**
+   - Azure Cache for Redis (einfacher)
+   - Oder: Redis auf VM (mehr Kontrolle)
+
+3. **Blob Storage:**
+   - Azure Blob Storage
+   - AWS S3
+   - MinIO (self-hosted S3-compatible)
+
+4. **Monitoring:**
+   - Application Insights
+   - Prometheus + Grafana
+   - ELK Stack
+
+---
+
+## 14. Schlüssel-Prinzipien
+
+**Architektur-Leitlinien für alle Implementierungen:**
+
+1. **Python für IFC, .NET für Business-Logic**
+   - Klare Trennung der Verantwortlichkeiten
+   - Kein IFC-Wissen in C# duplizieren
+
+2. **JSONB Pass-Through wo möglich**
+   - C#-Models nur für Relational + Business
+   - IFC-Daten bleiben JSON
+
+3. **Cache-First-Strategie**
+   - Redis für häufige Queries
+   - PostgreSQL als Secondary Cache
+   - Python nur bei Cache-Miss
+
+4. **Lizenz-Compliance (AGPL-3.0)**
+   - Bonsai: Konzepte lernen, NICHT Code kopieren
+   - Three.js: MIT-Lizenz, frei nutzbar
+   - IfcOpenshell: LGPL, ok für Backend-Service
+
+5. **Performance über Perfektion**
+   - Start mit einfachen Lösungen
+   - Optimieren wenn Benchmarks zeigen wo nötig
+   - "Good enough" für PoC
+
+6. **Horizontal skalierbar designen**
+   - Stateless Services
+   - Shared Cache (Redis)
+   - Load Balancer-ready
+
+---
+
+## 15. Glossar / Begriffsdefinitionen
+
+**IFC (Industry Foundation Classes):**
+- ISO-Standard für BIM-Datenaustausch
+- Komplexes Schema (800+ Entity-Typen)
+- Graph-basierte Datenstruktur
+
+**IfcOpenshell:**
+- Open-Source IFC-Library (Python/C++)
+- Reference Implementation für IFC-Parsing
+
+**Bonsai (ehem. BlenderBIM):**
+- BIM-Authoring-Tool in Blender
+- Nutzt IfcOpenshell als Kern
+- Apache 2.0 Lizenz
+
+**JSONB (PostgreSQL):**
+- Binary JSON-Storage
+- Effiziente Queries mit Indizes (GIN)
+- Native PostgreSQL-Operatoren (@>, ?, etc.)
+
+**glTF (GL Transmission Format):**
+- Offener 3D-Standard (Khronos Group)
+- Optimiert für Web (Three.js native Support)
+- Binary-Variante: GLB
+
+**Spatial Hierarchy:**
+- IFC-Struktur: Project → Site → Building → Storey → Space → Elements
+
+**PropertySet (Pset):**
+- Gruppierung von IFC-Properties
+- z.B. Pset_WallCommon (FireRating, LoadBearing, etc.)
+
+**BCF (BIM Collaboration Format):**
+- Standard für Issue-Tracking in BIM
+- Viewpoints + Kommentare
+- Herstellerunabhängig
+
+---
+
+**Dokument-Ende**
+
+---
+
+**Nutzungshinweise:**
+- Dieses Dokument kann als `architecture-decisions.md` ins Projekt hochgeladen werden
+- Alle zukünftigen Chats im Projekt haben dann automatisch Zugriff
+- Bei Änderungen: Versionsnummer hochzählen (z.B. v1.1)
