@@ -46,9 +46,9 @@ from .parser import IfcParser
 from .models import IfcMetadata
 from .gltf_exporter import GltfExporter, GltfExportOptions, GltfExportResult
 from .property_extractor import PropertyExtractor, IfcElementProperties
+from .spatial_tree_extractor import SpatialTreeExtractor, SpatialNode
 
 # Future imports
-# from .spatial_tree import SpatialTreeExtractor
 # from .cache_manager import IfcCacheManager
 
 __all__ = [
@@ -59,4 +59,6 @@ __all__ = [
     "GltfExportResult",
     "PropertyExtractor",
     "IfcElementProperties",
+    "SpatialTreeExtractor",
+    "SpatialNode",
 ]
