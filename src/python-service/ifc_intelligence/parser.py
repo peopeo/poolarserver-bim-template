@@ -10,8 +10,9 @@ License: MIT (our code) + LGPL (IfcOpenShell library)
 """
 
 import ifcopenshell
-from typing import Dict
+from typing import Dict, Optional
 from .models import IfcMetadata
+from .cache_manager import IfcCacheManager, get_global_cache
 
 
 class IfcParser:
@@ -20,7 +21,18 @@ class IfcParser:
 
     Uses IfcOpenShell API (LGPL) for IFC file access.
     Algorithm inspired by Bonsai's approach but independently implemented.
+
+    Supports caching for performance optimization.
     """
+
+    def __init__(self, cache_manager: Optional[IfcCacheManager] = None):
+        """
+        Initialize parser with optional cache.
+
+        Args:
+            cache_manager: Optional cache manager instance (uses global cache if None)
+        """
+        self.cache = cache_manager or get_global_cache()
 
     def parse_file(self, file_path: str) -> IfcMetadata:
         """
@@ -36,12 +48,12 @@ class IfcParser:
             FileNotFoundError: If file doesn't exist
             RuntimeError: If IFC file is invalid
         """
-        # Open IFC file using IfcOpenShell (LGPL library)
+        # Open IFC file using cache (LGPL library)
         try:
-            ifc_file = ifcopenshell.open(file_path)
+            ifc_file = self.cache.get_or_load(file_path)
         except FileNotFoundError:
             raise FileNotFoundError(f"IFC file not found: {file_path}")
-        except Exception as e:
+        except RuntimeError as e:
             raise RuntimeError(f"Failed to open IFC file: {str(e)}")
 
         # Extract project information
@@ -72,6 +84,7 @@ class IfcParser:
 
         Strategy: Count frequently used building elements.
         This is our own selection of relevant types.
+        Schema-aware: Only counts entity types that exist in the file's IFC schema version.
 
         Args:
             ifc_file: Opened IfcOpenShell file object
@@ -79,10 +92,10 @@ class IfcParser:
         Returns:
             Dictionary mapping entity type names to counts
         """
-        # Common IFC entity types to count
+        # Common IFC entity types to count (compatible with IFC2X3 and IFC4)
         # Selection based on typical BIM usage (not copied from Bonsai)
         types_to_count = [
-            # Building elements
+            # Building elements (IFC2X3+)
             "IfcWall",
             "IfcWallStandardCase",
             "IfcDoor",
@@ -94,28 +107,42 @@ class IfcParser:
             "IfcRoof",
             "IfcRailing",
 
-            # Spatial structure
+            # Spatial structure (IFC2X3+)
             "IfcSpace",
             "IfcBuildingStorey",
             "IfcBuilding",
             "IfcSite",
 
-            # MEP elements
-            "IfcPipeFitting",
-            "IfcPipeSegment",
-            "IfcDuctFitting",
-            "IfcDuctSegment",
-
-            # Furniture & Equipment
+            # Furniture & Equipment (IFC2X3+)
             "IfcFurnishingElement",
             "IfcFurniture",
         ]
 
+        # IFC4-specific entity types (not available in IFC2X3)
+        ifc4_specific_types = [
+            # MEP elements (IFC4+)
+            "IfcPipeFitting",
+            "IfcPipeSegment",
+            "IfcDuctFitting",
+            "IfcDuctSegment",
+        ]
+
+        # Get schema version
+        schema = ifc_file.schema
+
+        # Add IFC4-specific types if schema supports them
+        if schema.startswith('IFC4') or schema.startswith('IFC5'):
+            types_to_count.extend(ifc4_specific_types)
+
         counts = {}
         for entity_type in types_to_count:
-            entities = ifc_file.by_type(entity_type)
-            if entities:
-                counts[entity_type] = len(entities)
+            try:
+                entities = ifc_file.by_type(entity_type)
+                if entities:
+                    counts[entity_type] = len(entities)
+            except RuntimeError:
+                # Entity type doesn't exist in this schema version, skip it
+                pass
 
         return counts
 

@@ -13,6 +13,7 @@ import ifcopenshell
 import ifcopenshell.util.element
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
+from .cache_manager import IfcCacheManager, get_global_cache
 
 
 @dataclass
@@ -44,22 +45,26 @@ class PropertyExtractor:
 
     Uses IfcOpenShell API (LGPL) for property access.
     Strategy inspired by Bonsai's property extraction approach.
+
+    Supports caching for performance optimization.
     """
 
-    def __init__(self, ifc_file_path: Optional[str] = None):
+    def __init__(self, ifc_file_path: Optional[str] = None, cache_manager: Optional[IfcCacheManager] = None):
         """
         Initialize the property extractor.
 
         Args:
             ifc_file_path: Optional path to IFC file to open immediately
+            cache_manager: Optional cache manager instance (uses global cache if None)
         """
         self.ifc_file = None
+        self.cache = cache_manager or get_global_cache()
         if ifc_file_path:
             self.open_file(ifc_file_path)
 
     def open_file(self, ifc_file_path: str) -> None:
         """
-        Open an IFC file.
+        Open an IFC file using cache.
 
         Args:
             ifc_file_path: Path to IFC file
@@ -69,10 +74,10 @@ class PropertyExtractor:
             RuntimeError: If file cannot be opened
         """
         try:
-            self.ifc_file = ifcopenshell.open(ifc_file_path)
+            self.ifc_file = self.cache.get_or_load(ifc_file_path)
         except FileNotFoundError:
             raise FileNotFoundError(f"IFC file not found: {ifc_file_path}")
-        except Exception as e:
+        except RuntimeError as e:
             raise RuntimeError(f"Failed to open IFC file: {str(e)}")
 
     def get_element_by_guid(self, global_id: str):
