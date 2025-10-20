@@ -237,5 +237,91 @@ namespace ifcserver.Services
                 throw new InvalidOperationException($"Failed to extract properties: {ex.Message}", ex);
             }
         }
+
+        /// <summary>
+        /// Extracts spatial hierarchy tree from an IFC file using the Python extract_spatial_tree.py script.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <param name="flat">If true, returns flat list instead of tree structure</param>
+        /// <returns>SpatialNode tree or SpatialElementsList (if flat=true)</returns>
+        /// <exception cref="FileNotFoundException">If IFC file doesn't exist</exception>
+        /// <exception cref="InvalidOperationException">If Python script fails</exception>
+        public async Task<object> ExtractSpatialTreeAsync(string ifcFilePath, bool flat = false)
+        {
+            // Validate input file exists
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            _logger.LogInformation($"Extracting spatial tree from: {ifcFilePath} (flat: {flat})");
+
+            try
+            {
+                // Build path to extract_spatial_tree.py script
+                var scriptPath = Path.Combine(_pythonScriptsPath, "extract_spatial_tree.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                // Build arguments for Python script
+                var argumentsList = new List<string>
+                {
+                    $"\"{scriptPath}\"",
+                    $"\"{ifcFilePath}\""
+                };
+
+                if (flat)
+                    argumentsList.Add("--flat");
+
+                var arguments = string.Join(" ", argumentsList);
+
+                // Run Python script via ProcessRunner
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                _logger.LogDebug($"Python output: {jsonOutput}");
+
+                // Deserialize JSON output
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                // Deserialize based on flat flag
+                if (flat)
+                {
+                    var flatResult = JsonSerializer.Deserialize<SpatialElementsList>(jsonOutput, jsonOptions);
+
+                    if (flatResult == null)
+                    {
+                        throw new InvalidOperationException("Failed to deserialize spatial elements list from Python output");
+                    }
+
+                    _logger.LogInformation($"Successfully extracted {flatResult.ElementCount} spatial elements");
+
+                    return flatResult;
+                }
+                else
+                {
+                    var treeResult = JsonSerializer.Deserialize<SpatialNode>(jsonOutput, jsonOptions);
+
+                    if (treeResult == null)
+                    {
+                        throw new InvalidOperationException("Failed to deserialize spatial tree from Python output");
+                    }
+
+                    _logger.LogInformation($"Successfully extracted spatial tree. Root: {treeResult.IfcType}");
+
+                    return treeResult;
+                }
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to extract spatial tree: {ifcFilePath}");
+                throw new InvalidOperationException($"Failed to extract spatial tree: {ex.Message}", ex);
+            }
+        }
     }
 }

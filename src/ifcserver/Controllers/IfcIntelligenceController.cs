@@ -298,6 +298,83 @@ public class IfcIntelligenceController : ControllerBase
     }
 
     /// <summary>
+    /// Extract spatial hierarchy tree from an IFC file.
+    /// </summary>
+    /// <param name="file">IFC file to extract spatial tree from (multipart/form-data upload)</param>
+    /// <param name="flat">If true, returns flat list instead of tree structure</param>
+    /// <returns>SpatialNode tree or SpatialElementsList JSON object</returns>
+    /// <response code="200">Successfully extracted spatial tree</response>
+    /// <response code="400">Invalid file or bad request</response>
+    /// <response code="500">Server error during extraction</response>
+    [HttpPost("extract-spatial-tree")]
+    [ProducesResponseType(typeof(SpatialNode), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SpatialElementsList), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ExtractSpatialTree(
+        IFormFile file,
+        [FromForm] bool flat = false)
+    {
+        _logger.LogInformation("ExtractSpatialTree endpoint called");
+
+        // Validate file
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { error = "No file uploaded" });
+        }
+
+        // Validate file extension
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".ifc")
+        {
+            return BadRequest(new { error = "Only .ifc files are supported" });
+        }
+
+        _logger.LogInformation($"Received file: {file.FileName} ({file.Length} bytes), flat: {flat}");
+
+        try
+        {
+            // Create temp directory for uploaded file
+            var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
+            Directory.CreateDirectory(tempDir);
+
+            // Save uploaded file to temp location
+            var tempFilePath = Path.Combine(tempDir, $"{Guid.NewGuid()}.ifc");
+
+            using (var stream = new FileStream(tempFilePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            _logger.LogInformation($"Saved temp file: {tempFilePath}");
+
+            try
+            {
+                // Call Python service to extract spatial tree
+                var result = await _pythonIfcService.ExtractSpatialTreeAsync(tempFilePath, flat);
+
+                _logger.LogInformation($"Successfully extracted spatial tree");
+
+                return Ok(result);
+            }
+            finally
+            {
+                // Cleanup temp file
+                if (System.IO.File.Exists(tempFilePath))
+                {
+                    System.IO.File.Delete(tempFilePath);
+                    _logger.LogDebug($"Deleted temp file: {tempFilePath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting spatial tree");
+            return StatusCode(500, new { error = $"Failed to extract spatial tree: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint for IFC Intelligence service.
     /// </summary>
     /// <returns>Service status</returns>
@@ -314,7 +391,8 @@ public class IfcIntelligenceController : ControllerBase
             {
                 "parse",
                 "export-gltf",
-                "extract-properties"
+                "extract-properties",
+                "extract-spatial-tree"
             }
         });
     }
