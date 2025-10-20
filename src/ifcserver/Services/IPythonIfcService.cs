@@ -38,5 +38,13 @@ namespace ifcserver.Services
         /// <param name="flat">If true, returns flat list instead of tree structure</param>
         /// <returns>SpatialNode tree or SpatialElementsList (if flat=true)</returns>
         Task<object> ExtractSpatialTreeAsync(string ifcFilePath, bool flat = false);
+
+        /// <summary>
+        /// Extracts all element properties from an IFC file in bulk using Python IfcOpenShell.
+        /// This is used during upload to populate the IfcElements table for fast property queries.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <returns>List of IfcElement objects with properties</returns>
+        Task<List<IfcElement>> ExtractAllElementsAsync(string ifcFilePath);
     }
 }

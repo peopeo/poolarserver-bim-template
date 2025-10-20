@@ -14,7 +14,7 @@ import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import type { FilterCriteria, FilterResult, BIMMetadata } from '../../types/threejs';
-import { getStoredModelGltfUrl, getStoredModel } from '../../services/api/ifcIntelligenceApi';
+import { getStoredModelGltfUrl, getStoredModel, getStoredModelElementProperties, type IfcElementProperties, type SpatialNode } from '../../services/api/ifcIntelligenceApi';
 import * as THREE from 'three';
 
 interface ThreeJsViewerProps {
@@ -43,6 +43,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [currentModelName, setCurrentModelName] = useState<string>('');
   const [currentModelId, setCurrentModelId] = useState<number | null>(null);
   const [currentMetadata, setCurrentMetadata] = useState<BIMMetadata>(mockMetadata);
+  const [elementProperties, setElementProperties] = useState<IfcElementProperties | null>(null);
+  const [propertiesLoading, setPropertiesLoading] = useState<boolean>(false);
+  const [propertiesError, setPropertiesError] = useState<string | null>(null);
 
   const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
 
@@ -391,6 +394,45 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     setCurrentModelUrl(gltfUrl);
   };
 
+  // Spatial tree node selection handler
+  const handleSpatialNodeSelect = async (node: SpatialNode) => {
+    console.log('Selected spatial node:', node);
+
+    // Only fetch properties if we have a database model loaded
+    if (currentModelId === null) {
+      console.warn('Cannot fetch properties: No database model loaded');
+      setPropertiesError('Properties only available for database models');
+      return;
+    }
+
+    // Only fetch properties for non-spatial elements (building elements like walls, doors, etc.)
+    const spatialTypes = ['IfcProject', 'IfcSite', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace', 'IfcZone'];
+    if (spatialTypes.includes(node.ifc_type)) {
+      console.log(`Skipping property fetch for spatial element: ${node.ifc_type}`);
+      setElementProperties(null);
+      setPropertiesError(`${node.ifc_type} elements don't have detailed properties`);
+      return;
+    }
+
+    // Fetch properties from API
+    try {
+      setPropertiesLoading(true);
+      setPropertiesError(null);
+      console.log(`Fetching properties for element: ${node.global_id} (${node.ifc_type})`);
+
+      const properties = await getStoredModelElementProperties(currentModelId, node.global_id);
+      setElementProperties(properties);
+      console.log('Properties loaded successfully:', properties);
+    } catch (err) {
+      console.error('Error fetching element properties:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load properties';
+      setPropertiesError(errorMsg);
+      setElementProperties(null);
+    } finally {
+      setPropertiesLoading(false);
+    }
+  };
+
   // Export handlers
   const handleExport = async (options: ExportOptionsUI) => {
     try {
@@ -539,10 +581,7 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         {/* Spatial Tree Panel (Left side) */}
         <SpatialTreePanel
           spatialTree={currentMetadata.spatialHierarchy || null}
-          onSelectNode={(node) => {
-            console.log('Selected spatial node:', node);
-            // TODO: Implement element highlighting in 3D view
-          }}
+          onSelectNode={handleSpatialNodeSelect}
           darkMode={darkMode}
         />
 
@@ -554,10 +593,15 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
           darkMode={darkMode}
         />
 
-        {/* Property Panel */}
+        {/* Property Panel (Right side) */}
         <PropertyPanel
-          element={selectedElement}
-          onClose={clearSelection}
+          properties={elementProperties}
+          isLoading={propertiesLoading}
+          error={propertiesError}
+          onClose={() => {
+            setElementProperties(null);
+            setPropertiesError(null);
+          }}
           darkMode={darkMode}
         />
       </div>

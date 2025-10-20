@@ -29,6 +29,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IIfcService, IfcService>();
 builder.Services.AddScoped<IPythonIfcService, PythonIfcService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IIfcElementService, IfcElementService>();
 
 var app = builder.Build();
 

@@ -21,6 +21,7 @@ public class IfcIntelligenceController : ControllerBase
     private readonly AppDbContext _dbContext;
     private readonly IFileStorageService _fileStorage;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IIfcElementService _elementService;
 
     public IfcIntelligenceController(
         IPythonIfcService pythonIfcService,
@@ -28,7 +29,8 @@ public class IfcIntelligenceController : ControllerBase
         IWebHostEnvironment environment,
         AppDbContext dbContext,
         IFileStorageService fileStorage,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        IIfcElementService elementService)
     {
         _pythonIfcService = pythonIfcService;
         _logger = logger;
@@ -36,6 +38,7 @@ public class IfcIntelligenceController : ControllerBase
         _dbContext = dbContext;
         _fileStorage = fileStorage;
         _serviceScopeFactory = serviceScopeFactory;
+        _elementService = elementService;
     }
 
     /// <summary>
@@ -280,6 +283,30 @@ public class IfcIntelligenceController : ControllerBase
                     if (System.IO.File.Exists(tempGltfPath))
                     {
                         System.IO.File.Delete(tempGltfPath);
+                    }
+
+                    // Extract and store all element properties for fast database queries
+                    scopedLogger.LogInformation($"Extracting element properties for model ID: {modelId}");
+                    try
+                    {
+                        var elements = await scopedPythonService.ExtractAllElementsAsync(fullIfcFilePath);
+
+                        // Set ModelId for all elements
+                        foreach (var element in elements)
+                        {
+                            element.ModelId = modelId;
+                        }
+
+                        // Get element service from scope
+                        var scopedElementService = scope.ServiceProvider.GetRequiredService<IIfcElementService>();
+                        await scopedElementService.StoreElementsAsync(modelId, elements);
+
+                        scopedLogger.LogInformation($"Stored {elements.Count} element properties for model ID: {modelId}");
+                    }
+                    catch (Exception elemEx)
+                    {
+                        // Log error but don't fail the whole process - glTF conversion succeeded
+                        scopedLogger.LogError(elemEx, $"Failed to extract element properties for model ID: {modelId}");
                     }
                 }
                 catch (Exception ex)
@@ -1068,6 +1095,108 @@ public class IfcIntelligenceController : ControllerBase
     }
 
     /// <summary>
+    /// Trigger element extraction for an existing model to populate database cache.
+    /// </summary>
+    /// <param name="id">Model ID</param>
+    /// <returns>Status message</returns>
+    [HttpPost("models/{id}/extract-elements")]
+    public async Task<IActionResult> ExtractModelElements(int id)
+    {
+        try
+        {
+            // Get model from database
+            var model = await _dbContext.IfcModels.FindAsync(id);
+            if (model == null)
+            {
+                return NotFound(new { error = $"Model {id} not found" });
+            }
+
+            _logger.LogInformation($"Triggering element extraction for model ID: {id}");
+
+            // Trigger element extraction in background
+            _ = Task.Run(async () =>
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var scopedPythonService = scope.ServiceProvider.GetRequiredService<IPythonIfcService>();
+                var scopedElementService = scope.ServiceProvider.GetRequiredService<IIfcElementService>();
+                var scopedFileStorage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
+                var scopedLogger = scope.ServiceProvider.GetRequiredService<ILogger<IfcIntelligenceController>>();
+
+                try
+                {
+                    var fullIfcFilePath = scopedFileStorage.GetFullPath(model.IfcFilePath);
+                    scopedLogger.LogInformation($"Extracting elements from: {fullIfcFilePath}");
+
+                    var elements = await scopedPythonService.ExtractAllElementsAsync(fullIfcFilePath);
+
+                    // Set ModelId for all elements
+                    foreach (var element in elements)
+                    {
+                        element.ModelId = id;
+                    }
+
+                    await scopedElementService.StoreElementsAsync(id, elements);
+
+                    scopedLogger.LogInformation($"Successfully stored {elements.Count} elements for model ID: {id}");
+                }
+                catch (Exception ex)
+                {
+                    scopedLogger.LogError(ex, $"Failed to extract elements for model ID: {id}");
+                }
+            });
+
+            return Ok(new
+            {
+                id = model.Id,
+                fileName = model.FileName,
+                message = "Element extraction initiated in background"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error triggering element extraction for model {id}");
+            return StatusCode(500, new { error = $"Failed to trigger extraction: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Get element properties for a specific element in a stored IFC model.
+    /// This endpoint uses cached properties from the database for fast retrieval.
+    /// </summary>
+    /// <param name="id">Model ID</param>
+    /// <param name="elementGuid">GlobalId (GUID) of the element</param>
+    /// <returns>IfcElementProperties JSON object</returns>
+    [HttpGet("models/{id}/properties/{elementGuid}")]
+    public async Task<IActionResult> GetStoredModelElementProperties(int id, string elementGuid)
+    {
+        try
+        {
+            // Validate elementGuid
+            if (string.IsNullOrWhiteSpace(elementGuid))
+            {
+                return BadRequest(new { error = "elementGuid parameter is required" });
+            }
+
+            _logger.LogInformation($"Fetching properties for element {elementGuid} from model {id} (database query)");
+
+            // Get properties from database using C# service (FAST!)
+            var properties = await _elementService.GetElementPropertiesAsync(id, elementGuid);
+
+            if (properties == null)
+            {
+                return NotFound(new { error = $"Element with GUID {elementGuid} not found in model {id}" });
+            }
+
+            return Ok(properties);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error fetching properties for element {elementGuid} in model {id}");
+            return StatusCode(500, new { error = $"Failed to extract properties: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint for IFC Intelligence service.
     /// </summary>
     /// <returns>Service status</returns>
@@ -1089,6 +1218,7 @@ public class IfcIntelligenceController : ControllerBase
                 "extract-spatial-tree",
                 "models",
                 "stored-gltf",
+                "stored-model-properties",
                 "reprocess-spatial-tree"
             }
         });

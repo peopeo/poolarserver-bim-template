@@ -323,5 +323,83 @@ namespace ifcserver.Services
                 throw new InvalidOperationException($"Failed to extract spatial tree: {ex.Message}", ex);
             }
         }
+
+        /// <summary>
+        /// Extracts all element properties from an IFC file in bulk.
+        /// </summary>
+        /// <param name="ifcFilePath">Absolute path to the IFC file</param>
+        /// <returns>List of IfcElement objects with properties</returns>
+        public async Task<List<IfcElement>> ExtractAllElementsAsync(string ifcFilePath)
+        {
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            _logger.LogInformation($"Extracting all elements from: {ifcFilePath}");
+
+            try
+            {
+                var scriptPath = Path.Combine(_pythonScriptsPath, "extract_all_elements.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                // Run Python script (may take several minutes for large files)
+                var arguments = $"\"{scriptPath}\" \"{ifcFilePath}\"";
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                // Parse JSON output
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var bulkResult = JsonSerializer.Deserialize<BulkElementResult>(jsonOutput, jsonOptions);
+
+                if (bulkResult == null || bulkResult.Elements == null)
+                {
+                    throw new InvalidOperationException("Failed to deserialize element extraction result");
+                }
+
+                // Convert to IfcElement entities
+                var elements = bulkResult.Elements.Select(e => new IfcElement
+                {
+                    GlobalId = e.GlobalId,
+                    ElementType = e.ElementType,
+                    Name = e.Name,
+                    Description = e.Description,
+                    PropertiesJson = JsonSerializer.Serialize(e.Properties),
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+
+                _logger.LogInformation($"Extracted {elements.Count} elements");
+
+                return elements;
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to extract all elements: {ifcFilePath}");
+                throw new InvalidOperationException($"Failed to extract all elements: {ex.Message}", ex);
+            }
+        }
+
+        // Helper classes for bulk element extraction
+        private class BulkElementResult
+        {
+            public int ElementCount { get; set; }
+            public List<ElementData> Elements { get; set; } = new();
+        }
+
+        private class ElementData
+        {
+            public string GlobalId { get; set; } = "";
+            public string ElementType { get; set; } = "";
+            public string? Name { get; set; }
+            public string? Description { get; set; }
+            public Dictionary<string, object> Properties { get; set; } = new();
+        }
     }
 }

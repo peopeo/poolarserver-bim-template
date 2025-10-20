@@ -361,6 +361,30 @@ export function getStoredModelGltfUrl(id: number): string {
   return `${API_BASE_URL}/models/${id}/gltf`;
 }
 
+/**
+ * Get element properties for a specific element in a stored IFC model
+ *
+ * This endpoint uses the stored IFC file from the database, so you don't
+ * need to upload the file again.
+ *
+ * @param modelId - Model ID in the database
+ * @param elementGuid - GlobalId (GUID) of the element
+ * @returns Promise resolving to element properties
+ */
+export async function getStoredModelElementProperties(
+  modelId: number,
+  elementGuid: string
+): Promise<IfcElementProperties> {
+  const response = await fetch(`${API_BASE_URL}/models/${modelId}/properties/${elementGuid}`);
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // Convenience Methods
 // ============================================================================

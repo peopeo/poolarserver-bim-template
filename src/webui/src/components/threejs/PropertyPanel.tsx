@@ -1,144 +1,267 @@
 /**
  * PropertyPanel Component
  *
- * Displays BIM properties of selected elements
+ * Displays detailed IFC element properties including property sets, quantities,
+ * and type properties for the selected spatial tree element.
  */
 
-import React from 'react';
-import { X } from 'lucide-react';
-import type { BIMElement, BIMProperty } from '../../types/threejs';
+import React, { useState } from 'react';
+import { ChevronRight, ChevronDown, FileText, X, Loader2, AlertCircle } from 'lucide-react';
+import type { IfcElementProperties } from '../../services/api/ifcIntelligenceApi';
 
 interface PropertyPanelProps {
-  /** Selected BIM element */
-  element: BIMElement | null;
+  /** Element properties to display */
+  properties: IfcElementProperties | null;
 
-  /** Close callback */
-  onClose: () => void;
+  /** Loading state */
+  isLoading?: boolean;
 
-  /** Dark mode state */
+  /** Error message if loading failed */
+  error?: string | null;
+
+  /** Handler for closing the panel */
+  onClose?: () => void;
+
+  /** Dark mode */
   darkMode?: boolean;
 }
 
-export function PropertyPanel({ element, onClose, darkMode = false }: PropertyPanelProps) {
-  if (!element) return null;
+interface PropertySectionProps {
+  title: string;
+  data: Record<string, Record<string, any>>;
+  darkMode: boolean;
+  defaultExpanded?: boolean;
+}
 
-  // Group properties by PropertySet
-  const groupedProperties: Record<string, BIMProperty[]> = {};
-  element.properties.forEach(prop => {
-    if (!groupedProperties[prop.propertySet]) {
-      groupedProperties[prop.propertySet] = [];
-    }
-    groupedProperties[prop.propertySet].push(prop);
-  });
+function PropertySection({ title, data, darkMode, defaultExpanded = false }: PropertySectionProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const hasData = Object.keys(data).length > 0;
 
-  const propertySets = Object.keys(groupedProperties).sort();
+  if (!hasData) {
+    return null;
+  }
 
   return (
-    <div
-      className={`absolute top-4 right-4 w-80 max-h-[calc(100%-2rem)] flex flex-col ${
-        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-      } border rounded-lg shadow-xl z-10`}
-    >
-      {/* Header */}
-      <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm truncate">Element Properties</h3>
-          <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'} truncate`}>
-            {element.type}
-          </p>
+    <div className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={`w-full px-4 py-3 flex items-center justify-between hover:bg-opacity-50 ${
+          darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          <span className="font-medium text-sm">{title}</span>
+          <span className="text-xs text-gray-500">({Object.keys(data).length})</span>
         </div>
-        <button
-          onClick={onClose}
-          className={`ml-2 p-1 rounded ${
-            darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-          }`}
-          title="Close"
-        >
-          <X size={18} />
-        </button>
-      </div>
+      </button>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Element Name */}
-        {element.name && (
-          <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
-            <div className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
-              Name
-            </div>
-            <div className="text-sm">{element.name}</div>
-          </div>
-        )}
-
-        {/* IFC GUID */}
-        {element.ifcGuid && (
-          <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
-            <div className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
-              IFC GUID
-            </div>
-            <div className="text-xs font-mono break-all">{element.ifcGuid}</div>
-          </div>
-        )}
-
-        {/* Property Sets */}
-        {propertySets.map((psetName) => (
-          <div key={psetName} className={`border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
-            <div className={`px-4 py-2 ${darkMode ? 'bg-gray-750' : 'bg-gray-50'}`}>
-              <div className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                {psetName}
+      {isExpanded && (
+        <div className="px-4 pb-3">
+          {Object.entries(data).map(([setName, properties]) => (
+            <div key={setName} className="mb-3">
+              <div className={`text-xs font-semibold mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                {setName}
+              </div>
+              <div className="space-y-1">
+                {Object.entries(properties).map(([propName, propValue]) => (
+                  <div
+                    key={propName}
+                    className={`flex justify-between text-xs py-1 px-2 rounded ${
+                      darkMode ? 'bg-gray-800' : 'bg-gray-50'
+                    }`}
+                  >
+                    <span className={darkMode ? 'text-gray-400' : 'text-gray-600'}>{propName}</span>
+                    <span className="font-mono ml-2 text-right break-all max-w-[60%]">
+                      {formatPropertyValue(propValue)}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-700">
-              {groupedProperties[psetName].map((prop, idx) => (
-                <div key={`${psetName}-${prop.name}-${idx}`} className="px-4 py-2">
-                  <div className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {prop.name}
-                  </div>
-                  <div className="text-sm mt-0.5">
-                    {formatPropertyValue(prop.value, prop.type)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {/* No Properties */}
-        {element.properties.length === 0 && (
-          <div className={`px-4 py-8 text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            <p className="text-sm">No properties available</p>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className={`px-4 py-2 border-t ${darkMode ? 'border-gray-700 bg-gray-750' : 'border-gray-200 bg-gray-50'}`}>
-        <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {element.properties.length} {element.properties.length === 1 ? 'property' : 'properties'}
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-/**
- * Format property value for display
- */
-function formatPropertyValue(value: string | number | boolean | null, type: string): string {
+function formatPropertyValue(value: any): string {
   if (value === null || value === undefined) {
     return '-';
   }
-
-  switch (type) {
-    case 'boolean':
-      return value ? 'Yes' : 'No';
-    case 'number':
-    case 'integer':
-      if (typeof value === 'number') {
-        return value.toLocaleString();
-      }
-      return String(value);
-    default:
-      return String(value);
+  if (typeof value === 'boolean') {
+    return value ? 'True' : 'False';
   }
+  if (typeof value === 'number') {
+    // Format numbers with reasonable precision
+    return Number.isInteger(value) ? value.toString() : value.toFixed(3);
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+export function PropertyPanel({
+  properties,
+  isLoading = false,
+  error = null,
+  onClose,
+  darkMode = false
+}: PropertyPanelProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleClose = () => {
+    setIsOpen(false);
+    if (onClose) onClose();
+  };
+
+  const hasProperties = properties !== null;
+  const hasData = hasProperties && (
+    Object.keys(properties.property_sets).length > 0 ||
+    Object.keys(properties.quantities).length > 0 ||
+    Object.keys(properties.type_properties).length > 0
+  );
+
+  return (
+    <>
+      {!isOpen ? (
+        <div className="absolute right-4 bottom-40 z-40">
+          <button
+            onClick={() => setIsOpen(true)}
+            disabled={!hasProperties && !isLoading && !error}
+            className={`px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 ${
+              !hasProperties && !isLoading && !error
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
+                : darkMode
+                ? 'bg-gray-800 hover:bg-gray-700 border-gray-700'
+                : 'bg-white hover:bg-gray-50 border-gray-200'
+            } border`}
+            title={
+              hasProperties
+                ? 'Element Properties'
+                : isLoading
+                ? 'Loading properties...'
+                : error
+                ? 'Error loading properties'
+                : 'Select an element to view properties'
+            }
+          >
+            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+            <span className="text-sm font-medium">Properties</span>
+          </button>
+        </div>
+      ) : (
+        <div
+          className={`absolute right-4 top-20 w-[400px] h-[calc(100vh-180px)] rounded-lg shadow-xl border ${
+            darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          } flex flex-col`}
+        >
+          {/* Header */}
+          <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
+            <div className="flex items-center gap-2">
+              <FileText size={20} />
+              <span className="font-semibold">Element Properties</span>
+            </div>
+            <button
+              onClick={handleClose}
+              className={`p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="p-8 text-center">
+                <Loader2 size={48} className="mx-auto mb-4 opacity-50 animate-spin" />
+                <p className="text-sm text-gray-500">Loading properties...</p>
+              </div>
+            ) : error ? (
+              <div className="p-8 text-center text-red-500">
+                <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
+                <p className="text-sm font-medium mb-2">Error Loading Properties</p>
+                <p className="text-xs text-gray-500">{error}</p>
+              </div>
+            ) : !hasProperties ? (
+              <div className="p-8 text-center text-gray-500">
+                <FileText size={48} className="mx-auto mb-4 opacity-50" />
+                <p className="text-sm">No element selected</p>
+                <p className="text-xs mt-2">Select an element from the spatial tree to view properties</p>
+              </div>
+            ) : (
+              <>
+                {/* Basic Info */}
+                <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="text-xs text-gray-500">Element Type</div>
+                      <div className="text-sm font-medium">{properties.element_type}</div>
+                    </div>
+                    {properties.name && (
+                      <div>
+                        <div className="text-xs text-gray-500">Name</div>
+                        <div className="text-sm font-medium">{properties.name}</div>
+                      </div>
+                    )}
+                    {properties.description && (
+                      <div>
+                        <div className="text-xs text-gray-500">Description</div>
+                        <div className="text-sm">{properties.description}</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-xs text-gray-500">Global ID</div>
+                      <div className="text-xs font-mono break-all">{properties.global_id}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Property Sets */}
+                <PropertySection
+                  title="Property Sets"
+                  data={properties.property_sets}
+                  darkMode={darkMode}
+                  defaultExpanded={true}
+                />
+
+                {/* Quantities */}
+                <PropertySection
+                  title="Quantities"
+                  data={properties.quantities}
+                  darkMode={darkMode}
+                  defaultExpanded={false}
+                />
+
+                {/* Type Properties */}
+                <PropertySection
+                  title="Type Properties"
+                  data={properties.type_properties}
+                  darkMode={darkMode}
+                  defaultExpanded={false}
+                />
+
+                {!hasData && (
+                  <div className="p-8 text-center text-gray-500">
+                    <p className="text-sm">No additional properties available for this element</p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          {hasProperties && (
+            <div className={`px-4 py-2 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} text-xs text-gray-500`}>
+              {Object.keys(properties.property_sets).length} property sets •{' '}
+              {Object.keys(properties.quantities).length} quantities •{' '}
+              {Object.keys(properties.type_properties).length} type properties
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 }
