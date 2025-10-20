@@ -100,6 +100,122 @@ public class IfcIntelligenceController : ControllerBase
     }
 
     /// <summary>
+    /// Export an IFC file to glTF/GLB format.
+    /// </summary>
+    /// <param name="file">IFC file to export (multipart/form-data upload)</param>
+    /// <param name="format">Output format (glb or gltf)</param>
+    /// <param name="useNames">Use element names instead of GUIDs</param>
+    /// <param name="center">Center the model at origin</param>
+    /// <returns>glTF/GLB file download</returns>
+    /// <response code="200">Successfully exported glTF file</response>
+    /// <response code="400">Invalid file or bad request</response>
+    /// <response code="500">Server error during export</response>
+    [HttpPost("export-gltf")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ExportGltf(
+        IFormFile file,
+        [FromForm] string format = "glb",
+        [FromForm] bool useNames = false,
+        [FromForm] bool center = false)
+    {
+        _logger.LogInformation("ExportGltf endpoint called");
+
+        // Validate file
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { error = "No file uploaded" });
+        }
+
+        // Validate file extension
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension != ".ifc")
+        {
+            return BadRequest(new { error = "Only .ifc files are supported" });
+        }
+
+        // Validate format
+        if (format != "glb" && format != "gltf")
+        {
+            return BadRequest(new { error = "Format must be 'glb' or 'gltf'" });
+        }
+
+        _logger.LogInformation($"Received file: {file.FileName} ({file.Length} bytes), format: {format}");
+
+        try
+        {
+            // Create temp directory for files
+            var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
+            Directory.CreateDirectory(tempDir);
+
+            // Save uploaded IFC file to temp location
+            var tempIfcPath = Path.Combine(tempDir, $"{Guid.NewGuid()}.ifc");
+            var tempOutputPath = Path.Combine(tempDir, $"{Guid.NewGuid()}.{format}");
+
+            using (var stream = new FileStream(tempIfcPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            _logger.LogInformation($"Saved temp IFC file: {tempIfcPath}");
+
+            try
+            {
+                // Configure export options
+                var options = new GltfExportOptions
+                {
+                    Format = format,
+                    UseNames = useNames,
+                    Center = center
+                };
+
+                // Call Python service to export glTF
+                var result = await _pythonIfcService.ExportGltfAsync(tempIfcPath, tempOutputPath, options);
+
+                if (!result.Success)
+                {
+                    _logger.LogError($"glTF export failed: {result.ErrorMessage}");
+                    return StatusCode(500, new { error = result.ErrorMessage });
+                }
+
+                _logger.LogInformation($"Successfully exported glTF. Size: {result.FileSize} bytes");
+
+                // Read the exported file and return as download
+                var fileBytes = await System.IO.File.ReadAllBytesAsync(tempOutputPath);
+
+                // Determine content type
+                var contentType = format == "glb" ? "model/gltf-binary" : "model/gltf+json";
+
+                // Generate output filename based on input
+                var outputFileName = Path.GetFileNameWithoutExtension(file.FileName) + "." + format;
+
+                return File(fileBytes, contentType, outputFileName);
+            }
+            finally
+            {
+                // Cleanup temp files
+                if (System.IO.File.Exists(tempIfcPath))
+                {
+                    System.IO.File.Delete(tempIfcPath);
+                    _logger.LogDebug($"Deleted temp IFC file: {tempIfcPath}");
+                }
+
+                if (System.IO.File.Exists(tempOutputPath))
+                {
+                    System.IO.File.Delete(tempOutputPath);
+                    _logger.LogDebug($"Deleted temp output file: {tempOutputPath}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting glTF file");
+            return StatusCode(500, new { error = $"Failed to export glTF file: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint for IFC Intelligence service.
     /// </summary>
     /// <returns>Service status</returns>
@@ -114,7 +230,8 @@ public class IfcIntelligenceController : ControllerBase
             timestamp = DateTime.UtcNow,
             features = new[]
             {
-                "parse" // More features will be added in future tasks
+                "parse",
+                "export-gltf"
             }
         });
     }
