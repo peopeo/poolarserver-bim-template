@@ -959,6 +959,115 @@ public class IfcIntelligenceController : ControllerBase
     }
 
     /// <summary>
+    /// Retry glTF conversion for a model stuck in processing status.
+    /// </summary>
+    /// <param name="id">Model ID</param>
+    /// <returns>Conversion status</returns>
+    [HttpPost("models/{id}/retry-conversion")]
+    public async Task<IActionResult> RetryConversion(int id)
+    {
+        try
+        {
+            var model = await _dbContext.IfcModels.FindAsync(id);
+
+            if (model == null)
+            {
+                return NotFound(new { error = $"Model with ID {id} not found" });
+            }
+
+            _logger.LogInformation($"Retrying glTF conversion for model {id}: {model.FileName}");
+
+            // Trigger background conversion task
+            _ = Task.Run(async () =>
+            {
+                using var scope = _serviceScopeFactory.CreateScope();
+                var scopedDbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var scopedPythonService = scope.ServiceProvider.GetRequiredService<IPythonIfcService>();
+                var scopedFileStorage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
+                var scopedLogger = scope.ServiceProvider.GetRequiredService<ILogger<IfcIntelligenceController>>();
+
+                try
+                {
+                    var modelToConvert = await scopedDbContext.IfcModels.FindAsync(id);
+                    if (modelToConvert == null) return;
+
+                    // Reset status to processing
+                    modelToConvert.ConversionStatus = "processing";
+                    modelToConvert.ConversionError = null;
+                    await scopedDbContext.SaveChangesAsync();
+
+                    // Create temp directory for glTF output
+                    var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
+                    Directory.CreateDirectory(tempDir);
+                    var tempGltfPath = Path.Combine(tempDir, $"{Guid.NewGuid()}.glb");
+
+                    // Get full IFC path
+                    var fullIfcFilePath = scopedFileStorage.GetFullPath(modelToConvert.IfcFilePath);
+
+                    // Export to glTF
+                    var options = new GltfExportOptions { Format = "glb", UseNames = false, Center = false };
+                    var result = await scopedPythonService.ExportGltfAsync(fullIfcFilePath, tempGltfPath, options);
+
+                    if (result.Success)
+                    {
+                        // Save glTF file to storage
+                        var originalFileName = Path.GetFileNameWithoutExtension(modelToConvert.FileName);
+                        var gltfFilePath = await scopedFileStorage.SaveGltfFileAsync(tempGltfPath, originalFileName);
+
+                        // Update database record
+                        modelToConvert.GltfFilePath = gltfFilePath;
+                        modelToConvert.GltfFileSizeBytes = scopedFileStorage.GetFileSize(gltfFilePath);
+                        modelToConvert.ConversionStatus = "completed";
+                        modelToConvert.ConvertedAt = DateTime.UtcNow;
+
+                        await scopedDbContext.SaveChangesAsync();
+
+                        scopedLogger.LogInformation($"✅ Successfully converted model {id} to glTF");
+                    }
+                    else
+                    {
+                        modelToConvert.ConversionStatus = "failed";
+                        modelToConvert.ConversionError = result.ErrorMessage ?? "Unknown error during glTF conversion";
+                        await scopedDbContext.SaveChangesAsync();
+
+                        scopedLogger.LogError($"❌ Failed to convert model {id}: {result.ErrorMessage}");
+                    }
+
+                    // Clean up temp file
+                    if (System.IO.File.Exists(tempGltfPath))
+                    {
+                        System.IO.File.Delete(tempGltfPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    scopedLogger.LogError(ex, $"Error during background glTF conversion for model {id}");
+
+                    var modelToUpdate = await scopedDbContext.IfcModels.FindAsync(id);
+                    if (modelToUpdate != null)
+                    {
+                        modelToUpdate.ConversionStatus = "failed";
+                        modelToUpdate.ConversionError = ex.Message;
+                        await scopedDbContext.SaveChangesAsync();
+                    }
+                }
+            });
+
+            return Ok(new
+            {
+                id = model.Id,
+                fileName = model.FileName,
+                message = "Conversion retry initiated in background"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error retrying conversion for model {id}");
+            return StatusCode(500, new { error = $"Failed to retry conversion: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Health check endpoint for IFC Intelligence service.
     /// </summary>
     /// <returns>Service status</returns>

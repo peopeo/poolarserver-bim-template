@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 import ifcopenshell
 import ifcopenshell.util.element
+from .cache_manager import IfcCacheManager, get_global_cache
 
 
 # IFC spatial element types (from IFC standard)
@@ -76,19 +77,27 @@ class SpatialTreeExtractor:
     the spatial structure. This is a clean-room implementation inspired by
     Bonsai's approach but using only the IfcOpenShell API (LGPL).
 
+    Supports caching for performance optimization.
+
     Usage:
         extractor = SpatialTreeExtractor()
         tree = extractor.extract_tree("model.ifc")
         print(tree.to_dict())
     """
 
-    def __init__(self):
-        """Initialize the spatial tree extractor."""
+    def __init__(self, cache_manager: Optional[IfcCacheManager] = None):
+        """
+        Initialize the spatial tree extractor.
+
+        Args:
+            cache_manager: Optional cache manager instance (uses global cache if None)
+        """
         self.ifc_file: Optional[ifcopenshell.file] = None
+        self.cache = cache_manager or get_global_cache()
 
     def open_file(self, file_path: str) -> None:
         """
-        Open an IFC file for processing.
+        Open an IFC file for processing using cache.
 
         Args:
             file_path: Path to the IFC file
@@ -98,8 +107,10 @@ class SpatialTreeExtractor:
             RuntimeError: If file cannot be opened
         """
         try:
-            self.ifc_file = ifcopenshell.open(file_path)
-        except Exception as e:
+            self.ifc_file = self.cache.get_or_load(file_path)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"IFC file not found: {file_path}")
+        except RuntimeError as e:
             raise RuntimeError(f"Failed to open IFC file: {e}")
 
     def extract_tree(self, file_path: str) -> SpatialNode:
@@ -131,16 +142,17 @@ class SpatialTreeExtractor:
 
         return tree
 
-    def _build_node(self, element: ifcopenshell.entity_instance) -> SpatialNode:
+    def _build_node(self, element: ifcopenshell.entity_instance, include_spaces: bool = False) -> SpatialNode:
         """
         Recursively build a spatial node and its children.
 
-        This method uses IfcOpenShell's get_decomposition() utility to
-        traverse the spatial hierarchy. The algorithm follows the IFC
-        standard's spatial structure relationships (IfcRelAggregates).
+        This method properly traverses the IFC spatial hierarchy:
+        - Project → Site → Building → Storey (via IfcRelAggregates)
+        - Storey contains Spaces (via IfcRelContainedInSpatialStructure)
 
         Args:
             element: IFC element to build node for
+            include_spaces: If True, include IfcSpace children (for Storeys)
 
         Returns:
             SpatialNode with children populated recursively
@@ -154,22 +166,64 @@ class SpatialTreeExtractor:
             long_name=element.LongName if hasattr(element, "LongName") else None,
         )
 
+        element_type = element.is_a()
+
+        # Define which children types are valid for each parent type
+        # This enforces the correct hierarchy: Project → Site → Building → Storey → Space
+        valid_child_types = {
+            "IfcProject": {"IfcSite"},
+            "IfcSite": {"IfcBuilding"},
+            "IfcBuilding": {"IfcBuildingStorey"},
+            "IfcBuildingStorey": {"IfcSpace"},  # Spaces are leaf nodes
+            "IfcSpace": set(),  # Spaces have no spatial children
+        }
+
+        # Get the allowed child types for this element
+        allowed_children = valid_child_types.get(element_type, set())
+
+        if not allowed_children:
+            # No children allowed for this type
+            return node
+
         # Get spatial decomposition (children) using IfcOpenShell utility
-        # This internally handles IfcRelAggregates relationships
         try:
             decomposition = ifcopenshell.util.element.get_decomposition(element)
         except Exception:
             # If get_decomposition fails, return node without children
             return node
 
-        # Recursively build child nodes (only for spatial elements)
+        # Recursively build child nodes (only for correct spatial hierarchy)
         for child in decomposition:
             child_type = child.is_a()
 
-            # Only include spatial elements in tree
-            if child_type in SPATIAL_ELEMENT_TYPES:
-                child_node = self._build_node(child)
+            # Only include children that belong in this level of the hierarchy
+            if child_type in allowed_children:
+                # For storeys, this will include spaces; for others, only structural children
+                child_node = self._build_node(child, include_spaces=(child_type == "IfcBuildingStorey"))
                 node.children.append(child_node)
+
+        # Add physical building elements contained in this spatial element
+        # (walls, doors, windows, slabs, etc.)
+        if element_type in {"IfcBuildingStorey", "IfcSpace"}:
+            try:
+                # Get elements contained in this spatial structure
+                # Using IfcRelContainedInSpatialStructure relationship
+                for rel in getattr(element, 'ContainsElements', []):
+                    for contained_element in rel.RelatedElements:
+                        # Skip spatial elements (we only want physical building elements)
+                        if contained_element.is_a() not in SPATIAL_ELEMENT_TYPES:
+                            element_node = SpatialNode(
+                                global_id=contained_element.GlobalId if hasattr(contained_element, "GlobalId") else "",
+                                name=contained_element.Name if hasattr(contained_element, "Name") else None,
+                                ifc_type=contained_element.is_a(),
+                                description=contained_element.Description if hasattr(contained_element, "Description") else None,
+                                long_name=None,
+                                children=[]  # Building elements don't have children in this tree
+                            )
+                            node.children.append(element_node)
+            except Exception:
+                # If getting contained elements fails, continue without them
+                pass
 
         return node
 
