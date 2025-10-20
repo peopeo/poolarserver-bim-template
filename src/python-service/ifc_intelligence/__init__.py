@@ -41,9 +41,17 @@ __version__ = "0.1.0"
 __author__ = "Your Team"
 __license__ = "MIT"
 
-# Future imports will go here as modules are implemented
-# from .parser import IfcParser
+# Module imports
+from .parser import IfcParser
+from .models import IfcMetadata
+
+# Future imports
 # from .spatial_tree import SpatialTreeExtractor
 # from .property_extractor import PropertyExtractor
 # from .gltf_exporter import GltfExporter
 # from .cache_manager import IfcCacheManager
+
+__all__ = [
+    "IfcParser",
+    "IfcMetadata",
+]
