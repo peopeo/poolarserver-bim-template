@@ -1,0 +1,11 @@
+# IFC Intelligence Service - Python Dependencies
+
+# IFC Processing
+ifcopenshell>=0.7.0
+
+# Data Validation & Models
+pydantic>=2.5.0
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-cov>=4.1.0
