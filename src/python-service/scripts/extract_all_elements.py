@@ -9,7 +9,8 @@ Usage:
     python extract_all_elements.py <ifc_file_path>
 
 Output:
-    JSON array of all elements with their properties
+    JSON array of all elements with their properties (stdout)
+    Structured logs (stderr)
 """
 
 import sys
@@ -20,23 +21,31 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ifc_intelligence.bulk_element_extractor import BulkElementExtractor
+from ifc_intelligence.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
     if len(sys.argv) != 2:
+        logger.error("invalid_usage", expected="<ifc_file_path>", provided=sys.argv[1:])
         print(json.dumps({
             "error": "Usage: python extract_all_elements.py <ifc_file_path>"
         }))
         sys.exit(1)
 
     ifc_file_path = sys.argv[1]
+    logger.info("extraction_started", ifc_file_path=ifc_file_path)
 
     try:
         # Create extractor and extract all elements
         extractor = BulkElementExtractor()
-        elements = extractor.extract_all_elements(ifc_file_path)
+        logger.debug("extractor_created")
 
-        # Output as JSON
+        elements = extractor.extract_all_elements(ifc_file_path)
+        logger.info("extraction_completed", element_count=len(elements))
+
+        # Output as JSON to stdout ONLY
         result = {
             "element_count": len(elements),
             "elements": elements
@@ -45,10 +54,12 @@ def main():
         print(json.dumps(result, indent=2, default=str))
 
     except FileNotFoundError as e:
-        print(json.dumps({"error": str(e)}), file=sys.stderr)
+        logger.error("file_not_found", ifc_file_path=ifc_file_path, error=str(e))
+        print(json.dumps({"error": str(e)}))
         sys.exit(1)
     except Exception as e:
-        print(json.dumps({"error": f"Failed to extract elements: {str(e)}"}), file=sys.stderr)
+        logger.exception("extraction_failed", ifc_file_path=ifc_file_path, error=str(e))
+        print(json.dumps({"error": f"Failed to extract elements: {str(e)}"}))
         sys.exit(1)
 
 

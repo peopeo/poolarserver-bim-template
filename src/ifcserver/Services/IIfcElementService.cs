@@ -10,43 +10,43 @@ public interface IIfcElementService
     /// <summary>
     /// Get element properties by model ID and global ID
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
+    /// <param name="revisionId">IFC model ID</param>
     /// <param name="globalId">Element GlobalId (GUID)</param>
     /// <returns>Element properties, or null if not found</returns>
-    Task<object?> GetElementPropertiesAsync(int modelId, string globalId);
+    Task<object?> GetElementPropertiesAsync(int revisionId, string globalId);
 
     /// <summary>
     /// Get all elements for a specific model
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
+    /// <param name="revisionId">IFC model ID</param>
     /// <returns>List of elements</returns>
-    Task<List<IfcElement>> GetModelElementsAsync(int modelId);
+    Task<List<IfcElement>> GetModelElementsAsync(int revisionId);
 
     /// <summary>
     /// Get elements by type for a specific model
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
+    /// <param name="revisionId">IFC model ID</param>
     /// <param name="elementType">Element type (e.g., "IfcWall")</param>
     /// <returns>List of elements</returns>
-    Task<List<IfcElement>> GetElementsByTypeAsync(int modelId, string elementType);
+    Task<List<IfcElement>> GetElementsByTypeAsync(int revisionId, string elementType);
 
     /// <summary>
     /// Get element count for a specific model
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
+    /// <param name="revisionId">IFC model ID</param>
     /// <returns>Number of elements</returns>
-    Task<int> GetElementCountAsync(int modelId);
+    Task<int> GetElementCountAsync(int revisionId);
 
     /// <summary>
     /// Store multiple elements in the database
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
+    /// <param name="revisionId">IFC model ID</param>
     /// <param name="elements">List of elements to store</param>
-    Task StoreElementsAsync(int modelId, List<IfcElement> elements);
+    Task StoreElementsAsync(int revisionId, List<IfcElement> elements);
 
     /// <summary>
     /// Delete all elements for a specific model
     /// </summary>
-    /// <param name="modelId">IFC model ID</param>
-    Task DeleteModelElementsAsync(int modelId);
+    /// <param name="revisionId">IFC model ID</param>
+    Task DeleteModelElementsAsync(int revisionId);
 }

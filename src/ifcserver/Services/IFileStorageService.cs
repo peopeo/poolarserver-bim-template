@@ -14,12 +14,30 @@ public interface IFileStorageService
     Task<string> SaveIfcFileAsync(Stream stream, string fileName);
 
     /// <summary>
+    /// Save an uploaded IFC file to a custom storage path
+    /// </summary>
+    /// <param name="file">IFormFile to save</param>
+    /// <param name="relativePath">Relative storage path (e.g., "ifc-models/projects/1/revisions/1")</param>
+    /// <param name="fileName">Filename to use</param>
+    /// <returns>Full relative path to stored file</returns>
+    Task<string> SaveIfcFileAsync(IFormFile file, string relativePath, string fileName);
+
+    /// <summary>
     /// Save a generated glTF/GLB file to storage
     /// </summary>
     /// <param name="sourceFilePath">Path to source glTF file</param>
     /// <param name="originalIfcFileName">Original IFC filename for reference</param>
     /// <returns>Relative path to stored file</returns>
     Task<string> SaveGltfFileAsync(string sourceFilePath, string originalIfcFileName);
+
+    /// <summary>
+    /// Save a generated glTF/GLB file to a custom storage path
+    /// </summary>
+    /// <param name="sourceFilePath">Path to source glTF file</param>
+    /// <param name="relativePath">Relative storage path (e.g., "ifc-models/projects/1/revisions/1")</param>
+    /// <param name="fileName">Filename to use</param>
+    /// <returns>Full relative path to stored file</returns>
+    Task<string> SaveGltfFileAsync(string sourceFilePath, string relativePath, string fileName);
 
     /// <summary>
     /// Get full physical path for a stored file

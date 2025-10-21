@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ifcserver.Models;
 
 namespace ifcserver.Services
@@ -389,16 +390,28 @@ namespace ifcserver.Services
         // Helper classes for bulk element extraction
         private class BulkElementResult
         {
+            [JsonPropertyName("element_count")]
             public int ElementCount { get; set; }
+
+            [JsonPropertyName("elements")]
             public List<ElementData> Elements { get; set; } = new();
         }
 
         private class ElementData
         {
+            [JsonPropertyName("global_id")]
             public string GlobalId { get; set; } = "";
+
+            [JsonPropertyName("element_type")]
             public string ElementType { get; set; } = "";
+
+            [JsonPropertyName("name")]
             public string? Name { get; set; }
+
+            [JsonPropertyName("description")]
             public string? Description { get; set; }
+
+            [JsonPropertyName("properties")]
             public Dictionary<string, object> Properties { get; set; } = new();
         }
     }

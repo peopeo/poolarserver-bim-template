@@ -12,16 +12,16 @@ public class IfcElement
     public int Id { get; set; }
 
     /// <summary>
-    /// Foreign key to the parent IFC model
+    /// Foreign key to the parent revision
     /// </summary>
     [Required]
-    public int ModelId { get; set; }
+    public int RevisionId { get; set; }
 
     /// <summary>
-    /// Navigation property to parent model
+    /// Navigation property to parent revision
     /// </summary>
-    [ForeignKey(nameof(ModelId))]
-    public IfcModel Model { get; set; } = default!;
+    [ForeignKey(nameof(RevisionId))]
+    public Revision Revision { get; set; } = default!;
 
     /// <summary>
     /// IFC GlobalId (GUID) - unique identifier within the IFC file

@@ -60,6 +60,29 @@ public class FileStorageService : IFileStorageService
         return relativePath;
     }
 
+    public async Task<string> SaveIfcFileAsync(IFormFile file, string relativePath, string fileName)
+    {
+        // Combine relative path with filename
+        var fullRelativePath = Path.Combine(relativePath, fileName);
+        var fullPhysicalPath = GetFullPath(fullRelativePath);
+
+        // Ensure directory exists
+        var directory = Path.GetDirectoryName(fullPhysicalPath);
+        if (directory != null)
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        // Save file
+        using (var fileStream = new FileStream(fullPhysicalPath, FileMode.Create, FileAccess.Write))
+        {
+            await file.CopyToAsync(fileStream);
+        }
+
+        _logger.LogInformation("Saved IFC file to: {Path}", fullRelativePath);
+        return fullRelativePath;
+    }
+
     public async Task<string> SaveGltfFileAsync(string sourceFilePath, string originalIfcFileName)
     {
         // Create year/month subfolder structure
@@ -86,6 +109,26 @@ public class FileStorageService : IFileStorageService
 
         _logger.LogInformation("Saved glTF file to: {Path}", relativePath);
         return relativePath;
+    }
+
+    public async Task<string> SaveGltfFileAsync(string sourceFilePath, string relativePath, string fileName)
+    {
+        // Combine relative path with filename
+        var fullRelativePath = Path.Combine(relativePath, fileName);
+        var fullPhysicalPath = GetFullPath(fullRelativePath);
+
+        // Ensure directory exists
+        var directory = Path.GetDirectoryName(fullPhysicalPath);
+        if (directory != null)
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        // Copy file
+        await Task.Run(() => File.Copy(sourceFilePath, fullPhysicalPath, overwrite: true));
+
+        _logger.LogInformation("Saved glTF file to: {Path}", fullRelativePath);
+        return fullRelativePath;
     }
 
     public string GetFullPath(string relativePath)

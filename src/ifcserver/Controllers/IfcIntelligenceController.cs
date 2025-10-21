@@ -291,10 +291,10 @@ public class IfcIntelligenceController : ControllerBase
                     {
                         var elements = await scopedPythonService.ExtractAllElementsAsync(fullIfcFilePath);
 
-                        // Set ModelId for all elements
+                        // Set RevisionId for all elements
                         foreach (var element in elements)
                         {
-                            element.ModelId = modelId;
+                            element.RevisionId = modelId;
                         }
 
                         // Get element service from scope
@@ -1129,10 +1129,10 @@ public class IfcIntelligenceController : ControllerBase
 
                     var elements = await scopedPythonService.ExtractAllElementsAsync(fullIfcFilePath);
 
-                    // Set ModelId for all elements
+                    // Set RevisionId for all elements
                     foreach (var element in elements)
                     {
-                        element.ModelId = id;
+                        element.RevisionId = id;
                     }
 
                     await scopedElementService.StoreElementsAsync(id, elements);

@@ -12,6 +12,9 @@ import ifcopenshell
 import ifcopenshell.util.element
 from .cache_manager import IfcCacheManager, get_global_cache
 from .property_extractor import PropertyExtractor
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class BulkElementExtractor:
@@ -28,9 +31,11 @@ class BulkElementExtractor:
     """
 
     # IFC element types to extract (physical building elements)
+    # Note: by_type() returns all subtypes, so we only need parent types
+    # e.g., "IfcWall" returns both IfcWall and IfcWallStandardCase
     ELEMENT_TYPES = {
-        # Structural elements
-        "IfcWall", "IfcWallStandardCase",
+        # Structural elements (parent types only - subtypes are included automatically)
+        "IfcWall",  # includes IfcWallStandardCase
         "IfcSlab", "IfcRoof", "IfcBeam", "IfcColumn",
         "IfcFooting", "IfcPile", "IfcRailing",
 
@@ -38,8 +43,7 @@ class BulkElementExtractor:
         "IfcDoor", "IfcWindow",
 
         # Furnishing and equipment
-        "IfcFurnishingElement", "IfcFurniture",
-        "IfcSystemFurnitureElement",
+        "IfcFurnishingElement",  # includes IfcFurniture and IfcSystemFurnitureElement
 
         # Building equipment
         "IfcBuildingElementProxy",
@@ -54,8 +58,7 @@ class BulkElementExtractor:
         "IfcFlowTreatmentDevice",
 
         # Distribution elements
-        "IfcDistributionElement", "IfcDistributionFlowElement",
-        "IfcDistributionControlElement",
+        "IfcDistributionElement",  # parent type includes IfcDistributionFlowElement and IfcDistributionControlElement
 
         # Spatial elements (for context)
         "IfcSpace", "IfcBuildingStorey", "IfcBuilding", "IfcSite",
@@ -134,17 +137,18 @@ class BulkElementExtractor:
 
                             # Progress logging every 100 elements
                             if element_count % 100 == 0:
-                                print(f"Extracted {element_count} elements...", file=sys.stderr)
+                                logger.debug("extraction_progress", elements_extracted=element_count)
                     except Exception as e:
                         # Skip individual elements that fail to extract
-                        print(f"Warning: Failed to extract element {instance.GlobalId if hasattr(instance, 'GlobalId') else 'unknown'}: {e}", file=sys.stderr)
+                        element_id = instance.GlobalId if hasattr(instance, 'GlobalId') else 'unknown'
+                        logger.warning("element_extraction_failed", element_id=element_id, error=str(e))
                         continue
 
             except Exception as e:
                 # Skip element types that don't exist in this IFC schema
                 continue
 
-        print(f"Total elements extracted: {element_count}", file=sys.stderr)
+        logger.info("extraction_summary", total_elements=element_count, file_path=file_path)
         return elements
 
     def _extract_element_data(self, element: ifcopenshell.entity_instance) -> Optional[Dict[str, Any]]:

@@ -2,39 +2,57 @@ using System.Text.Json;
 using ifcserver.Data;
 using ifcserver.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ifcserver.Services;
 
 /// <summary>
 /// Service for querying IFC element properties from the database.
 /// This provides fast property retrieval by querying cached data instead of parsing IFC files.
+/// Uses memory caching to avoid repeated database queries for the same elements.
 /// </summary>
 public class IfcElementService : IIfcElementService
 {
     private readonly AppDbContext _dbContext;
     private readonly ILogger<IfcElementService> _logger;
+    private readonly IMemoryCache _cache;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
-    public IfcElementService(AppDbContext dbContext, ILogger<IfcElementService> logger)
+    public IfcElementService(AppDbContext dbContext, ILogger<IfcElementService> logger, IMemoryCache cache)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _cache = cache;
     }
 
     /// <summary>
-    /// Get element properties by model ID and global ID.
+    /// Get element properties by revision ID and global ID.
     /// Returns properties in the same format as the Python property extractor.
+    /// Uses memory caching to avoid repeated database queries.
     /// </summary>
-    public async Task<object?> GetElementPropertiesAsync(int modelId, string globalId)
+    public async Task<object?> GetElementPropertiesAsync(int revisionId, string globalId)
     {
+        // Create cache key combining revision ID and global ID
+        var cacheKey = $"element_props_{revisionId}_{globalId}";
+
+        // Try to get from cache first
+        if (_cache.TryGetValue(cacheKey, out object? cachedProperties))
+        {
+            _logger.LogDebug($"Cache hit for element: RevisionId={revisionId}, GlobalId={globalId}");
+            return cachedProperties;
+        }
+
         try
         {
+            _logger.LogDebug($"Cache miss for element: RevisionId={revisionId}, GlobalId={globalId}, querying database");
+
             var element = await _dbContext.IfcElements
-                .Where(e => e.ModelId == modelId && e.GlobalId == globalId)
+                .Where(e => e.RevisionId == revisionId && e.GlobalId == globalId)
                 .FirstOrDefaultAsync();
 
             if (element == null)
             {
-                _logger.LogWarning($"Element not found: ModelId={modelId}, GlobalId={globalId}");
+                _logger.LogWarning($"Element not found: RevisionId={revisionId}, GlobalId={globalId}");
                 return null;
             }
 
@@ -42,7 +60,7 @@ public class IfcElementService : IIfcElementService
             var properties = JsonSerializer.Deserialize<Dictionary<string, object>>(element.PropertiesJson);
 
             // Return in the format expected by the frontend
-            return new
+            var result = new
             {
                 global_id = element.GlobalId,
                 element_type = element.ElementType,
@@ -52,10 +70,20 @@ public class IfcElementService : IIfcElementService
                 quantities = GetPropertySection(properties, "quantities"),
                 type_properties = GetPropertySection(properties, "type_properties")
             };
+
+            // Cache the result
+            var cacheOptions = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(CacheDuration)
+                .SetSize(1); // Each entry counts as 1 unit
+
+            _cache.Set(cacheKey, result, cacheOptions);
+            _logger.LogDebug($"Cached element properties: RevisionId={revisionId}, GlobalId={globalId}");
+
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error retrieving element properties: ModelId={modelId}, GlobalId={globalId}");
+            _logger.LogError(ex, $"Error retrieving element properties: RevisionId={revisionId}, GlobalId={globalId}");
             throw;
         }
     }
@@ -66,7 +94,7 @@ public class IfcElementService : IIfcElementService
     public async Task<List<IfcElement>> GetModelElementsAsync(int modelId)
     {
         return await _dbContext.IfcElements
-            .Where(e => e.ModelId == modelId)
+            .Where(e => e.RevisionId == modelId)
             .OrderBy(e => e.ElementType)
             .ThenBy(e => e.Name)
             .ToListAsync();
@@ -78,7 +106,7 @@ public class IfcElementService : IIfcElementService
     public async Task<List<IfcElement>> GetElementsByTypeAsync(int modelId, string elementType)
     {
         return await _dbContext.IfcElements
-            .Where(e => e.ModelId == modelId && e.ElementType == elementType)
+            .Where(e => e.RevisionId == modelId && e.ElementType == elementType)
             .OrderBy(e => e.Name)
             .ToListAsync();
     }
@@ -89,7 +117,7 @@ public class IfcElementService : IIfcElementService
     public async Task<int> GetElementCountAsync(int modelId)
     {
         return await _dbContext.IfcElements
-            .Where(e => e.ModelId == modelId)
+            .Where(e => e.RevisionId == modelId)
             .CountAsync();
     }
 
@@ -103,15 +131,29 @@ public class IfcElementService : IIfcElementService
             // Delete existing elements for this model
             await DeleteModelElementsAsync(modelId);
 
-            // Add new elements
-            await _dbContext.IfcElements.AddRangeAsync(elements);
+            // Defensive: Deduplicate by GlobalId in case the Python extractor returns duplicates
+            // Note: Python script was fixed to not return duplicates, but this is a safety measure
+            // Keep first occurrence of each GlobalId
+            var uniqueElements = elements
+                .GroupBy(e => e.GlobalId)
+                .Select(g => g.First())
+                .ToList();
+
+            var duplicateCount = elements.Count - uniqueElements.Count;
+            if (duplicateCount > 0)
+            {
+                _logger.LogWarning($"Found {duplicateCount} duplicate GlobalIds from Python extractor for revision {modelId} - this should not happen! Keeping {uniqueElements.Count} unique elements.");
+            }
+
+            // Add unique elements
+            await _dbContext.IfcElements.AddRangeAsync(uniqueElements);
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"Stored {elements.Count} elements for model {modelId}");
+            _logger.LogInformation($"Stored {uniqueElements.Count} elements for revision {modelId}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Error storing elements for model {modelId}");
+            _logger.LogError(ex, $"Error storing elements for revision {modelId}");
             throw;
         }
     }
@@ -124,14 +166,21 @@ public class IfcElementService : IIfcElementService
         try
         {
             var elements = await _dbContext.IfcElements
-                .Where(e => e.ModelId == modelId)
+                .Where(e => e.RevisionId == modelId)
                 .ToListAsync();
 
             if (elements.Any())
             {
+                // Invalidate cache for all deleted elements
+                foreach (var element in elements)
+                {
+                    var cacheKey = $"element_props_{modelId}_{element.GlobalId}";
+                    _cache.Remove(cacheKey);
+                }
+
                 _dbContext.IfcElements.RemoveRange(elements);
                 await _dbContext.SaveChangesAsync();
-                _logger.LogInformation($"Deleted {elements.Count} elements for model {modelId}");
+                _logger.LogInformation($"Deleted {elements.Count} elements for model {modelId} and invalidated cache");
             }
         }
         catch (Exception ex)

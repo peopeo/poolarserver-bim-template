@@ -15,14 +15,19 @@ import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
 import { ModelLoader } from '../../services/threejs/ModelLoader';
 import type { FilterCriteria, FilterResult, BIMMetadata } from '../../types/threejs';
 import { getStoredModelGltfUrl, getStoredModel, getStoredModelElementProperties, type IfcElementProperties, type SpatialNode } from '../../services/api/ifcIntelligenceApi';
+import { getRevisionGltfUrl, getRevision, getRevisionSpatialTree, getRevisionElements, getRevisionElementProperties, type RevisionDetail } from '../../services/api/projectsApi';
 import * as THREE from 'three';
 
 interface ThreeJsViewerProps {
   /** Dark mode state */
   darkMode: boolean;
+  /** Optional project ID to load active revision from */
+  projectId?: number | null;
+  /** Optional revision ID to load specific revision */
+  revisionId?: number | null;
 }
 
-export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
+export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewerProps) {
   const canvasId = 'threejs-canvas';
   const containerRef = useRef<HTMLDivElement>(null);
   const modelLoaderRef = useRef<ModelLoader>(new ModelLoader());
@@ -34,7 +39,7 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [activePlanes, setActivePlanes] = useState<Array<{ id: string; position: THREE.Vector3; normal: THREE.Vector3; enabled: boolean }>>([]);
   const [planeIdCounter, setPlaneIdCounter] = useState(0);
   const [lastExportInfo, setLastExportInfo] = useState<{ width: number; height: number; size: number; timestamp: Date } | undefined>();
-  const [currentModelUrl, setCurrentModelUrl] = useState<string>(MOCK_GLTF_URL_ONLINE);
+  const [currentModelUrl, setCurrentModelUrl] = useState<string>('');
   const [modelLoadError, setModelLoadError] = useState<string | undefined>();
   const [initialCameraState, setInitialCameraState] = useState<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
   const [loadStartTime, setLoadStartTime] = useState<number | null>(null);
@@ -42,6 +47,8 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const [lastRenderTime, setLastRenderTime] = useState<number | null>(null);
   const [currentModelName, setCurrentModelName] = useState<string>('');
   const [currentModelId, setCurrentModelId] = useState<number | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
+  const [currentRevisionId, setCurrentRevisionId] = useState<number | null>(null);
   const [currentMetadata, setCurrentMetadata] = useState<BIMMetadata>(mockMetadata);
   const [elementProperties, setElementProperties] = useState<IfcElementProperties | null>(null);
   const [propertiesLoading, setPropertiesLoading] = useState<boolean>(false);
@@ -95,9 +102,101 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
     console.log('Filter reset');
   };
 
+  // Load revision when projectId/revisionId change
+  useEffect(() => {
+    const loadRevisionModel = async () => {
+      if (!projectId || !revisionId) return;
+
+      try {
+        console.log(`Loading revision ${revisionId} from project ${projectId}`);
+
+        // Fetch revision details
+        const revision: RevisionDetail = await getRevision(projectId, revisionId);
+
+        if (!revision.gltfFilePath) {
+          console.error('Revision does not have a glTF file');
+          setModelLoadError('This revision does not have a 3D model available. Processing may still be in progress.');
+          return;
+        }
+
+        if (revision.processingStatus !== 'Completed') {
+          console.warn(`Revision processing status: ${revision.processingStatus}`);
+          setModelLoadError(`Model processing ${revision.processingStatus.toLowerCase()}. Please wait for processing to complete.`);
+          return;
+        }
+
+        // Construct the glTF URL
+        const gltfUrl = getRevisionGltfUrl(projectId, revisionId);
+
+        console.log(`Loading revision: ${revision.versionIdentifier} (${revision.ifcFileName})`);
+        console.log(`glTF URL: ${gltfUrl}`);
+        console.log(`Has spatial tree: ${revision.hasSpatialTree}`);
+
+        // Create metadata for this revision
+        const revisionMetadata: BIMMetadata = {
+          projectName: `Revision ${revision.versionIdentifier}`,
+          schema: 'IFC',
+          elements: [], // Will be populated below
+          types: [],
+          spatialHierarchy: null, // Will fetch separately if available
+          propertySets: [],
+          modelId: `revision-${revisionId}`
+        };
+
+        // Fetch elements from database
+        try {
+          const elements = await getRevisionElements(projectId, revisionId);
+          revisionMetadata.elements = elements.map(e => ({
+            id: e.id,
+            type: e.type,
+            name: e.name || undefined,
+            ifcGuid: e.ifcGuid,
+            properties: []
+          }));
+
+          // Extract unique types
+          revisionMetadata.types = Array.from(new Set(elements.map(e => e.type)));
+
+          console.log(`✅ Loaded ${revisionMetadata.elements.length} elements for revision ${revision.versionIdentifier}`);
+        } catch (err) {
+          console.error('❌ Failed to load elements:', err);
+        }
+
+        // Fetch spatial tree if available
+        if (revision.hasSpatialTree) {
+          try {
+            const spatialTree = await getRevisionSpatialTree(projectId, revisionId);
+            revisionMetadata.spatialHierarchy = spatialTree;
+            console.log('Loaded spatial tree for revision');
+          } catch (err) {
+            console.warn('Failed to load spatial tree:', err);
+          }
+        }
+
+        setCurrentMetadata(revisionMetadata);
+
+        // Set model name and URL to trigger loading
+        setCurrentModelName(`${revision.versionIdentifier} - ${revision.ifcFileName}`);
+        setCurrentModelId(null); // Not using old model ID system
+        setCurrentProjectId(projectId);
+        setCurrentRevisionId(revisionId);
+        setCurrentModelUrl(gltfUrl);
+
+      } catch (err) {
+        console.error('Error loading revision:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load revision';
+        setModelLoadError(errorMsg);
+      }
+    };
+
+    loadRevisionModel();
+  }, [projectId, revisionId]);
+
   // Load model when scene is ready or URL changes
   useEffect(() => {
     if (!scene || !camera || !controls) return;
+    // Don't load if no URL is set (e.g., initial state before selecting a model)
+    if (!currentModelUrl || currentModelUrl === '') return;
 
     const loadGltfModel = async () => {
       try {
@@ -117,7 +216,8 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
         }
 
         // Determine metadata to use
-        let metadata = mockMetadata;
+        // Use currentMetadata if already loaded (from revision), otherwise use mock
+        let metadata = currentMetadata.elements.length > 0 ? currentMetadata : mockMetadata;
 
         // If loading from database, fetch actual model metadata
         if (currentModelId !== null) {
@@ -154,10 +254,9 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
             console.warn('Failed to fetch model metadata, using mock data:', err);
             setCurrentMetadata(mockMetadata);
           }
-        } else {
-          // URL-based model, use mock metadata
-          setCurrentMetadata(mockMetadata);
         }
+        // Note: If currentModelId is null but we have currentMetadata with elements,
+        // we use that (from revision loading) - no need to reset to mockMetadata
 
         // Load model (download + parse glTF)
         const result = await loadModel(currentModelUrl, metadata);
@@ -398,10 +497,10 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
   const handleSpatialNodeSelect = async (node: SpatialNode) => {
     console.log('Selected spatial node:', node);
 
-    // Only fetch properties if we have a database model loaded
-    if (currentModelId === null) {
-      console.warn('Cannot fetch properties: No database model loaded');
-      setPropertiesError('Properties only available for database models');
+    // Only fetch properties if we have a model or revision loaded
+    if (currentModelId === null && (currentProjectId === null || currentRevisionId === null)) {
+      console.warn('Cannot fetch properties: No model or revision loaded');
+      setPropertiesError('Properties only available for loaded models');
       return;
     }
 
@@ -420,9 +519,20 @@ export function ThreeJsViewer({ darkMode }: ThreeJsViewerProps) {
       setPropertiesError(null);
       console.log(`Fetching properties for element: ${node.global_id} (${node.ifc_type})`);
 
-      const properties = await getStoredModelElementProperties(currentModelId, node.global_id);
+      let properties;
+      if (currentProjectId !== null && currentRevisionId !== null) {
+        // Use revision API for models loaded from revisions
+        properties = await getRevisionElementProperties(currentProjectId, currentRevisionId, node.global_id);
+        console.log('Properties loaded from revision API:', properties);
+      } else if (currentModelId !== null) {
+        // Use old model API for backward compatibility
+        properties = await getStoredModelElementProperties(currentModelId, node.global_id);
+        console.log('Properties loaded from model API:', properties);
+      } else {
+        throw new Error('No model or revision context available');
+      }
+
       setElementProperties(properties);
-      console.log('Properties loaded successfully:', properties);
     } catch (err) {
       console.error('Error fetching element properties:', err);
       const errorMsg = err instanceof Error ? err.message : 'Failed to load properties';
