@@ -8,7 +8,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useThreeScene } from '../../hooks/threejs/useThreeScene';
 import { useModelLoader } from '../../hooks/threejs/useModelLoader';
 import { useSelection } from '../../hooks/threejs/useSelection';
-import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, ModelUrlInput, NavigationGizmo, ModelBrowserPanel, SpatialTreePanel } from '../../components/threejs';
+import { PropertyPanel, FilterPanel, ClippingPanel, ExportPanel, NavigationGizmo } from '../../components/threejs';
+import { ChevronLeft, ChevronRight, Building2, ChevronDown } from 'lucide-react';
 import type { ExportOptionsUI } from '../../components/threejs/ExportPanel';
 import { mockMetadata, MOCK_GLTF_URL_ONLINE, FilterManager, ClippingPlaneManager, ExportManager } from '../../services/threejs';
 import type { ClippingPlaneConfig, ExportResult } from '../../services/threejs';
@@ -17,6 +18,98 @@ import type { FilterCriteria, FilterResult, BIMMetadata } from '../../types/thre
 import { getStoredModelGltfUrl, getStoredModel, getStoredModelElementProperties, type IfcElementProperties, type SpatialNode } from '../../services/api/ifcIntelligenceApi';
 import { getRevisionGltfUrl, getRevision, getRevisionSpatialTree, getRevisionElements, getRevisionElementProperties, type RevisionDetail } from '../../services/api/projectsApi';
 import * as THREE from 'three';
+
+/**
+ * Tree Node Component for Spatial Hierarchy
+ */
+interface TreeNodeProps {
+  node: SpatialNode;
+  level: number;
+  onSelectNode?: (node: SpatialNode) => void;
+  darkMode: boolean;
+}
+
+function SpatialTreeNode({ node, level, onSelectNode, darkMode }: TreeNodeProps) {
+  const [isExpanded, setIsExpanded] = useState(level < 2); // Auto-expand first 2 levels
+  const hasChildren = node.children && node.children.length > 0;
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsExpanded(!isExpanded);
+  };
+
+  const handleSelect = () => {
+    if (onSelectNode) {
+      onSelectNode(node);
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    if (type.includes('Project')) return 'text-purple-500';
+    if (type.includes('Site')) return 'text-blue-500';
+    if (type.includes('Building')) return 'text-green-500';
+    if (type.includes('Storey')) return 'text-yellow-500';
+    if (type.includes('Space')) return 'text-orange-500';
+    return 'text-gray-500';
+  };
+
+  const getDisplayName = () => {
+    if (node.long_name) return node.long_name;
+    if (node.name) return node.name;
+    return node.ifc_type;
+  };
+
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-opacity-50 ${
+          darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+        }`}
+        style={{ paddingLeft: `${level * 16 + 8}px` }}
+        onClick={handleSelect}
+      >
+        {hasChildren ? (
+          <button
+            onClick={handleToggle}
+            className="p-0.5 hover:bg-gray-500 hover:bg-opacity-20 rounded"
+          >
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        ) : (
+          <span className="w-5" />
+        )}
+
+        <span className={`text-xs font-medium ${getTypeColor(node.ifc_type)}`}>
+          {node.ifc_type}
+        </span>
+
+        <span className="text-xs flex-1 truncate" title={getDisplayName()}>
+          {getDisplayName()}
+        </span>
+
+        {hasChildren && (
+          <span className="text-xs text-gray-400">
+            ({node.children.length})
+          </span>
+        )}
+      </div>
+
+      {isExpanded && hasChildren && (
+        <div>
+          {node.children.map((child, index) => (
+            <SpatialTreeNode
+              key={child.global_id || `${child.name}-${index}`}
+              node={child}
+              level={level + 1}
+              onSelectNode={onSelectNode}
+              darkMode={darkMode}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ThreeJsViewerProps {
   /** Dark mode state */
@@ -53,6 +146,8 @@ export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewer
   const [elementProperties, setElementProperties] = useState<IfcElementProperties | null>(null);
   const [propertiesLoading, setPropertiesLoading] = useState<boolean>(false);
   const [propertiesError, setPropertiesError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [propertiesSidebarOpen, setPropertiesSidebarOpen] = useState<boolean>(true);
 
   const backgroundColor = darkMode ? '#1a1a1a' : '#f0f0f0';
 
@@ -638,23 +733,6 @@ export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewer
           </div>
 
           <div className="relative z-50">
-            <ModelBrowserPanel
-              onLoadModel={handleLoadDatabaseModel}
-              isLoading={loadStatus === 'loading'}
-              darkMode={darkMode}
-            />
-          </div>
-
-          <div className="relative z-50">
-            <ModelUrlInput
-              onLoadUrl={handleLoadModelUrl}
-              isLoading={loadStatus === 'loading'}
-              error={modelLoadError}
-              darkMode={darkMode}
-            />
-          </div>
-
-          <div className="relative z-50">
             <FilterPanel
               availableTypes={currentMetadata.types}
               onFilterApply={handleFilterApply}
@@ -688,12 +766,53 @@ export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewer
           style={{ touchAction: 'none' }}
         />
 
-        {/* Spatial Tree Panel (Left side) */}
-        <SpatialTreePanel
-          spatialTree={currentMetadata.spatialHierarchy || null}
-          onSelectNode={handleSpatialNodeSelect}
-          darkMode={darkMode}
-        />
+        {/* Collapsible Sidebar with Spatial Tree */}
+        <div className={`absolute left-0 top-0 h-full transition-all duration-300 z-10 ${
+          sidebarOpen ? 'w-80' : 'w-0'
+        }`}>
+          <div className={`h-full ${
+            darkMode ? 'bg-gray-800 bg-opacity-95' : 'bg-white bg-opacity-95'
+          } ${sidebarOpen ? 'border-r' : ''} ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+          style={{ visibility: sidebarOpen ? 'visible' : 'hidden' }}>
+            {/* Sidebar Header */}
+            <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex items-center gap-2`}>
+              <Building2 size={20} />
+              <h3 className="font-semibold text-sm">Spatial Hierarchy</h3>
+            </div>
+
+            {/* Spatial Tree Content */}
+            <div className="flex-1 overflow-y-auto h-[calc(100%-60px)]">
+              {currentMetadata.spatialHierarchy ? (
+                <SpatialTreeNode
+                  node={currentMetadata.spatialHierarchy}
+                  level={0}
+                  onSelectNode={handleSpatialNodeSelect}
+                  darkMode={darkMode}
+                />
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  <Building2 size={48} className="mx-auto mb-4 opacity-50" />
+                  <p className="text-sm">No spatial hierarchy data available</p>
+                  <p className="text-xs mt-2">Load a model from the database to see spatial structure</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Toggle Button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className={`absolute ${
+            sidebarOpen ? 'left-80' : 'left-0'
+          } top-4 z-20 transition-all duration-300 ${
+            darkMode
+              ? 'bg-gray-800 hover:bg-gray-700 border-gray-700'
+              : 'bg-white hover:bg-gray-50 border-gray-200'
+          } border rounded-r-lg shadow-lg p-2`}
+        >
+          {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+        </button>
 
         {/* Navigation Gizmo */}
         <NavigationGizmo
@@ -703,17 +822,41 @@ export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewer
           darkMode={darkMode}
         />
 
-        {/* Property Panel (Right side) */}
-        <PropertyPanel
-          properties={elementProperties}
-          isLoading={propertiesLoading}
-          error={propertiesError}
-          onClose={() => {
-            setElementProperties(null);
-            setPropertiesError(null);
-          }}
-          darkMode={darkMode}
-        />
+        {/* Collapsible Properties Sidebar (Right side) */}
+        <div className={`absolute right-0 top-0 h-full transition-all duration-300 z-10 ${
+          propertiesSidebarOpen ? 'w-96' : 'w-0'
+        }`}>
+          <div className={`h-full ${
+            darkMode ? 'bg-gray-800 bg-opacity-95' : 'bg-white bg-opacity-95'
+          } ${propertiesSidebarOpen ? 'border-l' : ''} ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}
+          style={{ visibility: propertiesSidebarOpen ? 'visible' : 'hidden' }}>
+            {/* Render PropertyPanel without its own close functionality */}
+            <PropertyPanel
+              properties={elementProperties}
+              isLoading={propertiesLoading}
+              error={propertiesError}
+              onClose={() => {
+                setElementProperties(null);
+                setPropertiesError(null);
+              }}
+              darkMode={darkMode}
+            />
+          </div>
+        </div>
+
+        {/* Properties Sidebar Toggle Button */}
+        <button
+          onClick={() => setPropertiesSidebarOpen(!propertiesSidebarOpen)}
+          className={`absolute ${
+            propertiesSidebarOpen ? 'right-96' : 'right-0'
+          } top-4 z-20 transition-all duration-300 ${
+            darkMode
+              ? 'bg-gray-800 hover:bg-gray-700 border-gray-700'
+              : 'bg-white hover:bg-gray-50 border-gray-200'
+          } border rounded-l-lg shadow-lg p-2`}
+        >
+          {propertiesSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+        </button>
       </div>
 
       {/* Control Bar */}

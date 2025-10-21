@@ -110,13 +110,6 @@ export function PropertyPanel({
   onClose,
   darkMode = false
 }: PropertyPanelProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const handleClose = () => {
-    setIsOpen(false);
-    if (onClose) onClose();
-  };
-
   const hasProperties = properties !== null;
   const hasData = hasProperties && (
     Object.keys(properties.property_sets).length > 0 ||
@@ -125,52 +118,14 @@ export function PropertyPanel({
   );
 
   return (
-    <>
-      {!isOpen ? (
-        <div className="absolute right-4 bottom-40 z-40">
-          <button
-            onClick={() => setIsOpen(true)}
-            disabled={!hasProperties && !isLoading && !error}
-            className={`px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 ${
-              !hasProperties && !isLoading && !error
-                ? 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
-                : darkMode
-                ? 'bg-gray-800 hover:bg-gray-700 border-gray-700'
-                : 'bg-white hover:bg-gray-50 border-gray-200'
-            } border`}
-            title={
-              hasProperties
-                ? 'Element Properties'
-                : isLoading
-                ? 'Loading properties...'
-                : error
-                ? 'Error loading properties'
-                : 'Select an element to view properties'
-            }
-          >
-            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-            <span className="text-sm font-medium">Properties</span>
-          </button>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <FileText size={20} />
+          <span className="font-semibold">Element Properties</span>
         </div>
-      ) : (
-        <div
-          className={`absolute right-4 top-20 w-[400px] h-[calc(100vh-180px)] rounded-lg shadow-xl border ${
-            darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-          } flex flex-col`}
-        >
-          {/* Header */}
-          <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
-            <div className="flex items-center gap-2">
-              <FileText size={20} />
-              <span className="font-semibold">Element Properties</span>
-            </div>
-            <button
-              onClick={handleClose}
-              className={`p-1 rounded ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-            >
-              <X size={18} />
-            </button>
-          </div>
+      </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
@@ -260,8 +215,6 @@ export function PropertyPanel({
               {Object.keys(properties.type_properties).length} type properties
             </div>
           )}
-        </div>
-      )}
-    </>
+    </div>
   );
 }
