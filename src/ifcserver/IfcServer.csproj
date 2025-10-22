@@ -20,7 +20,7 @@
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
 
     <!-- XBIM Toolkit for IFC processing (currently disabled due to .NET 9 compatibility issues) -->
-    <PackageReference Include="Xbim.Essentials" Version="5.1.437" />
+    <PackageReference Include="Xbim.Essentials" Version="6.0.521" />
     <PackageReference Include="Xbim.Geometry.Engine.Interop" Version="5.1.437" />
     <PackageReference Include="Xbim.ModelGeometry.Scene" Version="5.1.341" />
   </ItemGroup>

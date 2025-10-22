@@ -45,8 +45,8 @@ builder.Services.AddMemoryCache(options =>
 // Core IFC processing services
 builder.Services.AddScoped<IIfcService, IfcService>();
 builder.Services.AddScoped<IPythonIfcService, PythonIfcService>();
-// XBIM disabled due to .NET 9 compatibility issues - see XBIM_IMPLEMENTATION_STATUS.md
-// builder.Services.AddScoped<IXbimIfcService, XbimIfcService>();
+// XBIM enabled - .NET 9 compatibility fixed (XBIM 6.0.521)
+builder.Services.AddScoped<IXbimIfcService, XbimIfcService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IIfcElementService, IfcElementService>();
 builder.Services.AddScoped<VersionIdentifierService>();

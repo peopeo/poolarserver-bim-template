@@ -136,3 +136,6 @@ src/python-service/logs/
 *.config/
 
 xeokit-sdk
+# === IFC/glTF storage files (too large for git) ===
+src/ifcserver/storage/
+src/webui/ifc_test_files/

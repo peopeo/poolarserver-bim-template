@@ -39,31 +39,64 @@ list() {
 
 # Function to kill all registered processes
 kill_all() {
-    if [ ! -s "$PROCESS_REGISTRY" ]; then
-        echo "No registered processes to kill"
-        return
+    echo "🔥 Aggressive cleanup of all background processes..."
+    echo ""
+
+    # 1. Kill registered processes first
+    if [ -s "$PROCESS_REGISTRY" ]; then
+        echo "1️⃣ Killing registered processes from registry..."
+        while IFS='|' read -r timestamp bash_id description; do
+            echo "  → $bash_id ($description)"
+        done < "$PROCESS_REGISTRY"
     fi
 
-    echo "Killing all registered processes..."
+    # 2. Kill all processes on port 5000
+    echo ""
+    echo "2️⃣ Killing all processes on port 5000..."
+    pids=$(lsof -ti:5000 2>/dev/null)
+    if [ -n "$pids" ]; then
+        echo "  Found PIDs: $pids"
+        echo "$pids" | xargs kill -9 2>/dev/null && echo "  ✓ Killed port 5000 processes"
+    else
+        echo "  ℹ️ No processes on port 5000"
+    fi
 
-    while IFS='|' read -r timestamp bash_id description; do
-        echo "  Killing $bash_id ($description)..."
-        # Try to kill via bash shell ID (background bash processes)
-        # Note: This won't work directly, but we can kill the actual process
+    # 3. Kill all dotnet run processes
+    echo ""
+    echo "3️⃣ Killing all 'dotnet run' processes..."
+    pkill -9 -f "dotnet run" 2>/dev/null && echo "  ✓ Killed dotnet run processes" || echo "  ℹ️ No dotnet run processes found"
 
-        # Extract PID if it's a dotnet process on port 5000
-        if [[ "$description" == *"dotnet"* ]]; then
-            pids=$(lsof -ti:5000 2>/dev/null)
-            if [ -n "$pids" ]; then
-                echo "    Found PIDs on port 5000: $pids"
-                echo "$pids" | xargs kill -9 2>/dev/null && echo "    ✓ Killed"
-            fi
-        fi
-    done < "$PROCESS_REGISTRY"
+    # 4. Kill all IfcServer processes
+    echo ""
+    echo "4️⃣ Killing all IfcServer processes..."
+    pkill -9 -f "IfcServer" 2>/dev/null && echo "  ✓ Killed IfcServer processes" || echo "  ℹ️ No IfcServer processes found"
 
-    # Clear registry
+    # 5. Kill all dotnet processes (aggressive)
+    echo ""
+    echo "5️⃣ Killing all dotnet processes (except VS Code Roslyn)..."
+    ps aux | grep -E "dotnet.*Debug.*IfcServer" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null && echo "  ✓ Killed debug dotnet processes" || echo "  ℹ️ No debug dotnet processes found"
+
+    # 6. Report zombie processes (can't kill them, but inform user)
+    echo ""
+    echo "6️⃣ Checking for zombie processes..."
+    zombies=$(ps aux | grep -E "dotnet|IfcServer" | grep defunct | wc -l)
+    if [ "$zombies" -gt 0 ]; then
+        echo "  ⚠️ Found $zombies zombie processes (these are already dead, waiting for cleanup)"
+        echo "  ℹ️ Zombies will be cleaned up automatically by system"
+    else
+        echo "  ✓ No zombie processes found"
+    fi
+
+    # 7. Kill any lingering nohup processes
+    echo ""
+    echo "7️⃣ Killing lingering nohup processes..."
+    pkill -9 -f "nohup.*dotnet" 2>/dev/null && echo "  ✓ Killed nohup processes" || echo "  ℹ️ No nohup processes found"
+
+    # 8. Clear registry
     > "$PROCESS_REGISTRY"
-    echo "✓ All processes killed and registry cleared"
+    echo ""
+    echo "✅ Aggressive cleanup complete! Registry cleared."
+    echo ""
 }
 
 # Function to remove a specific process from registry
