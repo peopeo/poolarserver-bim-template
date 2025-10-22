@@ -515,6 +515,54 @@ public class XbimRevisionsController : ControllerBase
                 else
                 {
                     await processingLogger.WarningAsync(revisionId, "Xbim", $"glTF conversion not available: {gltfResult.ErrorMessage}");
+
+                    // HYBRID APPROACH: Fallback to IfcOpenShell for glTF generation
+                    await processingLogger.InfoAsync(revisionId, "Xbim", "Falling back to IfcOpenShell for glTF conversion...");
+
+                    try
+                    {
+                        // Resolve PythonIfcService from service provider (not injected in constructor)
+                        var pythonIfcService = scope.ServiceProvider.GetRequiredService<IPythonIfcService>();
+
+                        var fallbackTimer = System.Diagnostics.Stopwatch.StartNew();
+                        var (fallbackResult, fallbackMetrics) = await pythonIfcService.ExportGltfWithMetricsAsync(
+                            fullIfcPath,
+                            gltfFullPath
+                        );
+                        fallbackTimer.Stop();
+
+                        if (fallbackResult.Success)
+                        {
+                            await processingLogger.InfoAsync(
+                                revisionId,
+                                "Xbim",
+                                $"✅ IfcOpenShell glTF fallback successful ({fallbackTimer.ElapsedMilliseconds}ms, {fallbackResult.FileSize / 1024 / 1024:F2} MB)"
+                            );
+
+                            session.GltfFileSizeBytes = fallbackResult.FileSize;
+                            revision.GltfFilePath = gltfRelativePath;
+
+                            // Add note to metrics about hybrid approach
+                            session.WarningCount++;
+                        }
+                        else
+                        {
+                            await processingLogger.ErrorAsync(
+                                revisionId,
+                                "Xbim",
+                                $"IfcOpenShell glTF fallback also failed: {fallbackResult.ErrorMessage}"
+                            );
+                        }
+                    }
+                    catch (Exception fallbackEx)
+                    {
+                        await processingLogger.ErrorAsync(
+                            revisionId,
+                            "Xbim",
+                            "IfcOpenShell glTF fallback error",
+                            fallbackEx
+                        );
+                    }
                 }
             }
             catch (Exception gltfEx)
