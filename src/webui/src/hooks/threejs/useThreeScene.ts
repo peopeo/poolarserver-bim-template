@@ -8,9 +8,28 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
+export type RendererType = 'webgl' | 'webgpu';
+
+// WebGPU support check
+const checkWebGPUAvailability = async (): Promise<boolean> => {
+  if (!('gpu' in navigator)) {
+    return false;
+  }
+
+  try {
+    const adapter = await (navigator as any).gpu?.requestAdapter();
+    return !!adapter;
+  } catch {
+    return false;
+  }
+};
+
 export interface UseThreeSceneOptions {
   /** Canvas element ID */
   canvasId: string;
+
+  /** Renderer type (webgl or webgpu) */
+  rendererType?: RendererType;
 
   /** Enable antialiasing */
   antialias?: boolean;
@@ -38,7 +57,7 @@ export interface UseThreeSceneResult {
   /** Camera */
   camera: THREE.PerspectiveCamera | null;
 
-  /** WebGL renderer */
+  /** Renderer (WebGL only for now, WebGPU coming soon) */
   renderer: THREE.WebGLRenderer | null;
 
   /** Orbit controls */
@@ -49,6 +68,12 @@ export interface UseThreeSceneResult {
 
   /** Error state */
   error: string | null;
+
+  /** Actual renderer type being used */
+  actualRendererType: RendererType;
+
+  /** Whether WebGPU is available */
+  webGpuAvailable: boolean;
 }
 
 /**
@@ -57,6 +82,7 @@ export interface UseThreeSceneResult {
 export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResult {
   const {
     canvasId,
+    rendererType = 'webgl',
     antialias = true,
     transparent = false,
     backgroundColor = '#f0f0f0',
@@ -71,9 +97,12 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
   const controlsRef = useRef<OrbitControls | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
+  const resizeHandlerRef = useRef<(() => void) | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actualRendererType, setActualRendererType] = useState<RendererType>('webgl');
+  const [webGpuAvailable, setWebGpuAvailable] = useState(false);
   const isInitialized = useRef(false);
 
   useEffect(() => {
@@ -89,32 +118,49 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
       return;
     }
 
-    try {
-      // Create scene
-      const scene = new THREE.Scene();
-      if (!transparent) {
-        scene.background = new THREE.Color(backgroundColor);
-      }
-      sceneRef.current = scene;
+    const initializeScene = async () => {
+      try {
+        // Check WebGPU availability (for future use)
+        const gpuAvailable = await checkWebGPUAvailability();
+        setWebGpuAvailable(gpuAvailable);
 
-      // Create camera
-      const aspect = canvas.clientWidth / canvas.clientHeight;
-      const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-      camera.position.set(10, 10, 10);
-      camera.lookAt(0, 0, 0);
-      cameraRef.current = camera;
+        // For now, always use WebGL (WebGPU support coming in future Three.js versions)
+        if (rendererType === 'webgpu') {
+          console.warn('WebGPU renderer requested but not yet supported in this version. Using WebGL.');
+          if (gpuAvailable) {
+            console.info('WebGPU is available in your browser - support coming soon!');
+          }
+        }
 
-      // Create renderer
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias,
-        alpha: transparent
-      });
-      renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      rendererRef.current = renderer;
+        setActualRendererType('webgl');
+
+        // Create scene
+        const scene = new THREE.Scene();
+        if (!transparent) {
+          scene.background = new THREE.Color(backgroundColor);
+        }
+        sceneRef.current = scene;
+
+        // Create camera
+        const aspect = canvas.clientWidth / canvas.clientHeight;
+        const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
+        camera.position.set(10, 10, 10);
+        camera.lookAt(0, 0, 0);
+        cameraRef.current = camera;
+
+        // Create WebGL renderer
+        const renderer = new THREE.WebGLRenderer({
+          canvas,
+          antialias,
+          alpha: transparent
+        });
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        rendererRef.current = renderer;
+
+        console.log(`✅ Using WebGL renderer (WebGPU available: ${gpuAvailable})`);
 
       // Create orbit controls
       const controls = new OrbitControls(camera, canvas);
@@ -172,69 +218,74 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
         renderer.setSize(width, height);
       };
 
+      resizeHandlerRef.current = handleResize;
+
       if (autoResize) {
         window.addEventListener('resize', handleResize);
         // Initial resize
         setTimeout(handleResize, 100);
       }
 
-      isInitialized.current = true;
-      setIsLoading(false);
+        isInitialized.current = true;
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Error initializing Three.js scene:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+        setIsLoading(false);
+      }
+    };
 
-      // Cleanup function
-      return () => {
-        if (autoResize) {
-          window.removeEventListener('resize', handleResize);
+    initializeScene();
+
+    // Cleanup function
+    return () => {
+      if (autoResize && resizeHandlerRef.current) {
+        window.removeEventListener('resize', resizeHandlerRef.current);
+      }
+
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+
+      if (controlsRef.current) {
+        controlsRef.current.dispose();
+      }
+
+      if (gridHelperRef.current && sceneRef.current) {
+        sceneRef.current.remove(gridHelperRef.current);
+        gridHelperRef.current.geometry.dispose();
+        if (Array.isArray(gridHelperRef.current.material)) {
+          gridHelperRef.current.material.forEach(m => m.dispose());
+        } else {
+          gridHelperRef.current.material.dispose();
         }
+      }
 
-        if (animationFrameRef.current !== null) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-
-        if (controlsRef.current) {
-          controlsRef.current.dispose();
-        }
-
-        if (gridHelperRef.current && sceneRef.current) {
-          sceneRef.current.remove(gridHelperRef.current);
-          gridHelperRef.current.geometry.dispose();
-          if (Array.isArray(gridHelperRef.current.material)) {
-            gridHelperRef.current.material.forEach(m => m.dispose());
-          } else {
-            gridHelperRef.current.material.dispose();
-          }
-        }
-
-        if (sceneRef.current) {
-          // Dispose of all scene objects
-          sceneRef.current.traverse((object) => {
-            if (object instanceof THREE.Mesh) {
-              object.geometry.dispose();
-              if (Array.isArray(object.material)) {
-                object.material.forEach(material => material.dispose());
-              } else {
-                object.material.dispose();
-              }
+      if (sceneRef.current) {
+        // Dispose of all scene objects
+        sceneRef.current.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
+            } else {
+              object.material.dispose();
             }
-          });
-        }
+          }
+        });
+      }
 
-        if (rendererRef.current) {
-          rendererRef.current.dispose();
-        }
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+      }
 
-        sceneRef.current = null;
-        cameraRef.current = null;
-        rendererRef.current = null;
-        controlsRef.current = null;
-        gridHelperRef.current = null;
-      };
-    } catch (err) {
-      console.error('Error initializing Three.js scene:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setIsLoading(false);
-    }
-  }, [canvasId, antialias, transparent, showGrid, gridSize, autoResize]);
+      sceneRef.current = null;
+      cameraRef.current = null;
+      rendererRef.current = null;
+      controlsRef.current = null;
+      gridHelperRef.current = null;
+    };
+  }, [canvasId, rendererType, antialias, transparent, showGrid, gridSize, autoResize]);
 
   // Update scene background when backgroundColor changes
   useEffect(() => {
@@ -249,6 +300,8 @@ export function useThreeScene(options: UseThreeSceneOptions): UseThreeSceneResul
     renderer: rendererRef.current,
     controls: controlsRef.current,
     isLoading,
-    error
+    error,
+    actualRendererType,
+    webGpuAvailable
   };
 }

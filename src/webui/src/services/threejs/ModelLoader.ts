@@ -138,12 +138,18 @@ export class ModelLoader {
   }
 
   /**
-   * Center model at origin
+   * Center model at origin (horizontally only, keeping bottom on ground plane)
    */
   centerModel(model: THREE.Group): void {
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
-    model.position.sub(center);
+
+    // Center only on X and Z axes, keep model sitting on ground (y=0)
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+
+    // Position model so its bottom is at y=0 (grid level)
+    model.position.y -= box.min.y;
   }
 
   /**

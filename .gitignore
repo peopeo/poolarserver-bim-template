@@ -122,6 +122,9 @@ Desktop.ini
 *.report
 *.csv
 *.jsonl
+logs/
+src/ifcserver/logs/
+src/python-service/logs/
 
 # === Miscellaneous ===
 .idea/

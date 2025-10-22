@@ -5,9 +5,10 @@ import './TreeView.css';
 
 interface XeokitViewerProps {
   darkMode: boolean;
+  projectId?: number | null;
 }
 
-export function XeokitViewer({ darkMode }: XeokitViewerProps) {
+export function XeokitViewer({ darkMode, projectId }: XeokitViewerProps) {
   const canvasId = 'xeokit-canvas';
   const treeViewContainerId = 'xeokit-treeview';
   const navCubeCanvasId = 'xeokit-navcube';
