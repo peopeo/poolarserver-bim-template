@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/layout/Header';
 import { XeokitViewer } from './components/viewer/XeokitViewer';
 import { ThreeJsViewer } from './viewers/threejs-viewer';
+import { BabylonViewer } from './viewers/babylon-viewer/BabylonViewer';
 import { ViewerSelector } from './components/shared';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
@@ -41,11 +42,11 @@ export default function Dashboard(): JSX.Element {
     setSelectedProjectId(null);
   };
 
-  const handleViewRevisionIn3D = (projectId: number, revisionId: number) => {
+  const handleViewRevisionIn3D = (projectId: number, revisionId: number, viewerType: 'xeokit' | 'threejs' | 'babylon' = 'threejs') => {
     setViewerProjectId(projectId);
     setViewerRevisionId(revisionId);
     setActivePage('viewer');
-    setActiveViewer('threejs'); // Use ThreeJS viewer for project revisions
+    setActiveViewer(viewerType);
   };
 
   return (
@@ -131,8 +132,10 @@ export default function Dashboard(): JSX.Element {
               <div className={`flex-1 flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
                 {activeViewer === 'xeokit' ? (
                   <XeokitViewer darkMode={darkMode} projectId={viewerProjectId} />
+                ) : activeViewer === 'babylon' ? (
+                  <BabylonViewer darkMode={darkMode} projectId={viewerProjectId ?? undefined} revisionId={viewerRevisionId ?? undefined} />
                 ) : (
-                  <ThreeJsViewer darkMode={darkMode} projectId={viewerProjectId} revisionId={viewerRevisionId} />
+                  <ThreeJsViewer darkMode={darkMode} projectId={viewerProjectId ?? undefined} revisionId={viewerRevisionId ?? undefined} />
                 )}
               </div>
             </div>

@@ -64,6 +64,31 @@ export function ViewerSelector({ activeViewer, onSelect, darkMode = false }: Vie
           PoC
         </span>
       </button>
+      <button
+        onClick={() => onSelect('babylon')}
+        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          activeViewer === 'babylon'
+            ? darkMode
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white text-blue-600 shadow-sm'
+            : darkMode
+            ? 'text-gray-300 hover:text-white'
+            : 'text-gray-600 hover:text-gray-900'
+        }`}
+      >
+        Babylon.js Viewer
+        <span
+          className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
+            activeViewer === 'babylon'
+              ? 'bg-blue-500 text-white'
+              : darkMode
+              ? 'bg-gray-700 text-gray-400'
+              : 'bg-gray-300 text-gray-600'
+          }`}
+        >
+          Beta
+        </span>
+      </button>
     </div>
   );
 }

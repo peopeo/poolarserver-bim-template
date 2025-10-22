@@ -10,7 +10,7 @@ import type { BIMElement } from './bim.types';
 /**
  * Viewer type selector
  */
-export type ViewerType = 'xeokit' | 'threejs';
+export type ViewerType = 'xeokit' | 'threejs' | 'babylon';
 
 /**
  * Camera projection types

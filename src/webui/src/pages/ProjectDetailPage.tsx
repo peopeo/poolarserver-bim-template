@@ -9,7 +9,7 @@ interface ProjectDetailPageProps {
   darkMode: boolean;
   projectId: number;
   onBack: () => void;
-  onViewRevisionIn3D?: (projectId: number, revisionId: number) => void;
+  onViewRevisionIn3D?: (projectId: number, revisionId: number, viewerType: 'xeokit' | 'threejs' | 'babylon') => void;
 }
 
 export function ProjectDetailPage({ darkMode, projectId, onBack, onViewRevisionIn3D }: ProjectDetailPageProps): JSX.Element {
@@ -77,10 +77,22 @@ export function ProjectDetailPage({ darkMode, projectId, onBack, onViewRevisionI
     }
   };
 
-  // Handle view in 3D
-  const handleView3D = (revisionId: number) => {
+  // Handle view in 3D viewers
+  const handleViewXeokit = (revisionId: number) => {
     if (onViewRevisionIn3D) {
-      onViewRevisionIn3D(projectId, revisionId);
+      onViewRevisionIn3D(projectId, revisionId, 'xeokit');
+    }
+  };
+
+  const handleViewThreeJS = (revisionId: number) => {
+    if (onViewRevisionIn3D) {
+      onViewRevisionIn3D(projectId, revisionId, 'threejs');
+    }
+  };
+
+  const handleViewBabylon = (revisionId: number) => {
+    if (onViewRevisionIn3D) {
+      onViewRevisionIn3D(projectId, revisionId, 'babylon');
     }
   };
 
@@ -186,7 +198,9 @@ export function ProjectDetailPage({ darkMode, projectId, onBack, onViewRevisionI
                   onSetActive={() => handleSetActive(revision.id)}
                   onEditComment={() => setEditingRevision(revision)}
                   onDelete={() => setDeletingRevision(revision)}
-                  onView3D={() => handleView3D(revision.id)}
+                  onViewXeokit={() => handleViewXeokit(revision.id)}
+                  onViewThreeJS={() => handleViewThreeJS(revision.id)}
+                  onViewBabylon={() => handleViewBabylon(revision.id)}
                 />
               ))}
             </div>
