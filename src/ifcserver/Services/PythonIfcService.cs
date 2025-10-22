@@ -387,6 +387,240 @@ namespace ifcserver.Services
             }
         }
 
+        /// <summary>
+        /// Extracts all elements with metrics tracking
+        /// </summary>
+        public async Task<(List<IfcElement> elements, PythonMetrics metrics)> ExtractAllElementsWithMetricsAsync(
+            string ifcFilePath,
+            MetricsSession? session = null)
+        {
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            _logger.LogInformation($"Extracting all elements from: {ifcFilePath} (with metrics)");
+
+            try
+            {
+                var scriptPath = Path.Combine(_pythonScriptsPath, "extract_all_elements.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                // Run Python script (may take several minutes for large files)
+                var arguments = $"\"{scriptPath}\" \"{ifcFilePath}\"";
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                // Parse JSON output (now includes metrics)
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var bulkResult = JsonSerializer.Deserialize<BulkElementResultWithMetrics>(jsonOutput, jsonOptions);
+
+                if (bulkResult == null || bulkResult.Elements == null)
+                {
+                    throw new InvalidOperationException("Failed to deserialize element extraction result");
+                }
+
+                // Convert to IfcElement entities
+                var elements = bulkResult.Elements.Select(e => new IfcElement
+                {
+                    GlobalId = e.GlobalId,
+                    ElementType = e.ElementType,
+                    Name = e.Name,
+                    Description = e.Description,
+                    PropertiesJson = JsonSerializer.Serialize(e.Properties),
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+
+                // Populate MetricsSession if provided
+                if (session != null && bulkResult.Metrics != null)
+                {
+                    PopulateMetricsFromPython(session, bulkResult.Metrics);
+                }
+
+                _logger.LogInformation($"Extracted {elements.Count} elements with metrics");
+
+                return (elements, bulkResult.Metrics ?? new PythonMetrics());
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to extract all elements: {ifcFilePath}");
+                throw new InvalidOperationException($"Failed to extract all elements: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Exports glTF with metrics tracking
+        /// </summary>
+        public async Task<(GltfExportResult result, PythonMetrics metrics)> ExportGltfWithMetricsAsync(
+            string ifcFilePath,
+            string outputPath,
+            GltfExportOptions? options = null)
+        {
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            options ??= new GltfExportOptions();
+
+            _logger.LogInformation($"Exporting IFC to glTF with metrics: {ifcFilePath} -> {outputPath}");
+
+            try
+            {
+                var scriptPath = Path.Combine(_pythonScriptsPath, "export_gltf.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                // Build arguments for Python script
+                var argumentsList = new List<string>
+                {
+                    $"\"{scriptPath}\"",
+                    $"\"{ifcFilePath}\"",
+                    $"\"{outputPath}\"",
+                    $"--format {options.Format}"
+                };
+
+                if (options.UseNames) argumentsList.Add("--use-names");
+                if (options.NoGuids) argumentsList.Add("--no-guids");
+                if (options.NoMaterialNames) argumentsList.Add("--no-material-names");
+                if (options.Center) argumentsList.Add("--center");
+                if (options.YUp) argumentsList.Add("--y-up");
+
+                var arguments = string.Join(" ", argumentsList);
+
+                // Run Python script
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                // Deserialize JSON output (now includes metrics)
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var resultWithMetrics = JsonSerializer.Deserialize<GltfExportResultWithMetrics>(jsonOutput, jsonOptions);
+
+                if (resultWithMetrics == null)
+                {
+                    throw new InvalidOperationException("Failed to deserialize glTF export result");
+                }
+
+                var result = new GltfExportResult
+                {
+                    Success = resultWithMetrics.Success,
+                    OutputPath = resultWithMetrics.OutputPath,
+                    FileSize = resultWithMetrics.FileSize,
+                    ErrorMessage = resultWithMetrics.ErrorMessage
+                };
+
+                _logger.LogInformation($"Exported glTF with metrics. Success: {result.Success}, Size: {result.FileSize} bytes");
+
+                return (result, resultWithMetrics.Metrics ?? new PythonMetrics());
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to export IFC to glTF: {ifcFilePath}");
+                throw new InvalidOperationException($"Failed to export IFC to glTF: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Extracts spatial tree with metrics tracking
+        /// </summary>
+        public async Task<(SpatialNode tree, PythonMetrics metrics)> ExtractSpatialTreeWithMetricsAsync(string ifcFilePath)
+        {
+            if (!File.Exists(ifcFilePath))
+            {
+                throw new FileNotFoundException($"IFC file not found: {ifcFilePath}");
+            }
+
+            _logger.LogInformation($"Extracting spatial tree with metrics from: {ifcFilePath}");
+
+            try
+            {
+                var scriptPath = Path.Combine(_pythonScriptsPath, "extract_spatial_tree.py");
+
+                if (!File.Exists(scriptPath))
+                {
+                    throw new FileNotFoundException($"Python script not found: {scriptPath}");
+                }
+
+                var arguments = $"\"{scriptPath}\" \"{ifcFilePath}\"";
+
+                // Run Python script
+                var jsonOutput = await ProcessRunner.RunProcessAsync("python3", arguments);
+
+                // Deserialize JSON output (now includes metrics)
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                var resultWithMetrics = JsonSerializer.Deserialize<SpatialTreeResultWithMetrics>(jsonOutput, jsonOptions);
+
+                if (resultWithMetrics == null)
+                {
+                    throw new InvalidOperationException("Failed to deserialize spatial tree result");
+                }
+
+                _logger.LogInformation($"Extracted spatial tree with metrics");
+
+                return (resultWithMetrics.Tree, resultWithMetrics.Metrics ?? new PythonMetrics());
+            }
+            catch (Exception ex) when (ex is not FileNotFoundException)
+            {
+                _logger.LogError(ex, $"Failed to extract spatial tree: {ifcFilePath}");
+                throw new InvalidOperationException($"Failed to extract spatial tree: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Populates MetricsSession from Python metrics
+        /// </summary>
+        private void PopulateMetricsFromPython(MetricsSession session, PythonMetrics pythonMetrics)
+        {
+            // Populate timing data - store Python timings directly
+            if (pythonMetrics.Timings != null)
+            {
+                session.PythonParseMs = pythonMetrics.Timings.ParseMs;
+                session.PythonElementExtractionMs = pythonMetrics.Timings.ElementExtractionMs;
+                session.PythonSpatialTreeMs = pythonMetrics.Timings.SpatialTreeMs;
+                session.PythonGltfExportMs = pythonMetrics.Timings.GltfExportMs;
+            }
+
+            // Populate statistics
+            if (pythonMetrics.Statistics != null)
+            {
+                if (pythonMetrics.Statistics.ElementTypeCounts != null)
+                {
+                    session.ElementCounts.Clear();
+                    foreach (var kvp in pythonMetrics.Statistics.ElementTypeCounts)
+                    {
+                        session.ElementCounts[kvp.Key] = kvp.Value;
+                    }
+                }
+
+                session.TotalPropertySets = pythonMetrics.Statistics.TotalPropertySets ?? 0;
+                session.TotalProperties = pythonMetrics.Statistics.TotalProperties ?? 0;
+                session.TotalQuantities = pythonMetrics.Statistics.TotalQuantities ?? 0;
+            }
+
+            // Populate warnings
+            if (pythonMetrics.Warnings != null)
+            {
+                session.WarningCount = pythonMetrics.Warnings.Count;
+            }
+        }
+
         // Helper classes for bulk element extraction
         private class BulkElementResult
         {
@@ -395,6 +629,63 @@ namespace ifcserver.Services
 
             [JsonPropertyName("elements")]
             public List<ElementData> Elements { get; set; } = new();
+        }
+
+        private class BulkElementResultWithMetrics
+        {
+            [JsonPropertyName("elements")]
+            public List<ElementData> Elements { get; set; } = new();
+
+            [JsonPropertyName("metrics")]
+            public PythonMetrics? Metrics { get; set; }
+        }
+
+        private class GltfExportResultWithMetrics
+        {
+            [JsonPropertyName("success")]
+            public bool Success { get; set; }
+
+            [JsonPropertyName("output_path")]
+            public string? OutputPath { get; set; }
+
+            [JsonPropertyName("file_size")]
+            public long FileSize { get; set; }
+
+            [JsonPropertyName("error_message")]
+            public string? ErrorMessage { get; set; }
+
+            [JsonPropertyName("metrics")]
+            public PythonMetrics? Metrics { get; set; }
+        }
+
+        private class SpatialTreeResultWithMetrics : SpatialNode
+        {
+            [JsonPropertyName("metrics")]
+            public PythonMetrics? Metrics { get; set; }
+
+            // Inherit from SpatialNode to get tree structure
+            [JsonPropertyName("name")]
+            public new string? Name { get; set; }
+
+            [JsonPropertyName("type")]
+            public string? Type { get; set; }
+
+            [JsonPropertyName("ifc_type")]
+            public new string? IfcType { get; set; }
+
+            [JsonPropertyName("children")]
+            public new List<SpatialNode>? Children { get; set; }
+
+            // Convert to regular SpatialNode
+            public SpatialNode Tree => new SpatialNode
+            {
+                Name = this.Name,
+                IfcType = this.IfcType ?? this.Type ?? "Unknown",
+                GlobalId = this.GlobalId,
+                LongName = this.LongName,
+                Description = this.Description,
+                Children = this.Children ?? new List<SpatialNode>()
+            };
         }
 
         private class ElementData

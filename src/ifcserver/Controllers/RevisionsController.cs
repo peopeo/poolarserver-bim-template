@@ -21,6 +21,8 @@ public class RevisionsController : ControllerBase
     private readonly IPythonIfcService _pythonIfcService;
     private readonly IIfcElementService _elementService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IProcessingMetricsCollector _metricsCollector;
+    private readonly ProcessingLogger _processingLogger;
 
     public RevisionsController(
         AppDbContext context,
@@ -29,7 +31,9 @@ public class RevisionsController : ControllerBase
         IFileStorageService fileStorage,
         IPythonIfcService pythonIfcService,
         IIfcElementService elementService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IProcessingMetricsCollector metricsCollector,
+        ProcessingLogger processingLogger)
     {
         _context = context;
         _logger = logger;
@@ -38,6 +42,8 @@ public class RevisionsController : ControllerBase
         _pythonIfcService = pythonIfcService;
         _elementService = elementService;
         _serviceProvider = serviceProvider;
+        _metricsCollector = metricsCollector;
+        _processingLogger = processingLogger;
     }
 
     /// <summary>
@@ -347,7 +353,8 @@ public class RevisionsController : ControllerBase
             IsActive = true, // New revisions are automatically set as active
             IfcFilePath = savedIfcPath,
             IfcFileName = file.FileName,
-            ProcessingStatus = "Pending"
+            ProcessingStatus = "Pending",
+            ProcessingEngine = "IfcOpenShell" // Mark as IfcOpenShell engine
         };
 
         _context.Revisions.Add(revision);
@@ -550,7 +557,7 @@ public class RevisionsController : ControllerBase
     }
 
     /// <summary>
-    /// Background processing method for uploaded revisions
+    /// Background processing method for uploaded revisions with metrics collection
     /// Converts IFC to glTF, extracts elements, and builds spatial tree
     /// </summary>
     /// <param name="revisionId">Revision ID to process</param>
@@ -564,6 +571,10 @@ public class RevisionsController : ControllerBase
         var scopedFileStorage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
         var scopedElementService = scope.ServiceProvider.GetRequiredService<IIfcElementService>();
         var scopedLogger = scope.ServiceProvider.GetRequiredService<ILogger<RevisionsController>>();
+        var scopedMetricsCollector = scope.ServiceProvider.GetRequiredService<IProcessingMetricsCollector>();
+        var scopedProcessingLogger = scope.ServiceProvider.GetRequiredService<ProcessingLogger>();
+
+        MetricsSession? session = null;
 
         try
         {
@@ -577,66 +588,41 @@ public class RevisionsController : ControllerBase
                 return;
             }
 
+            // Get full IFC path and file info
+            var fullIfcPath = scopedFileStorage.GetFullPath(ifcFilePath);
+            var fileInfo = new FileInfo(fullIfcPath);
+
+            if (!fileInfo.Exists)
+            {
+                scopedLogger.LogError("IFC file not found at path: {IfcFilePath}", fullIfcPath);
+                revision.ProcessingStatus = "Failed";
+                revision.ProcessingError = "IFC file not found";
+                await scopedDbContext.SaveChangesAsync();
+                return;
+            }
+
+            // Start metrics session
+            session = scopedMetricsCollector.StartSession(
+                revisionId,
+                "IfcOpenShell",
+                fileInfo.Name,
+                fileInfo.Length);
+
+            await scopedProcessingLogger.InfoAsync(revisionId, "IfcOpenShell",
+                "Started processing IFC file",
+                new { fileName = fileInfo.Name, fileSizeMb = Math.Round(fileInfo.Length / (1024.0 * 1024.0), 2) });
+
             // Update status to processing
             revision.ProcessingStatus = "Processing";
             await scopedDbContext.SaveChangesAsync();
             scopedLogger.LogInformation("Updated revision {RevisionId} status to Processing", revisionId);
 
-            // Get full IFC path
-            var fullIfcPath = scopedFileStorage.GetFullPath(ifcFilePath);
-            scopedLogger.LogInformation("Processing IFC file: {IfcFilePath}", fullIfcPath);
-
-            // Step 1: Convert IFC to glTF
-            scopedLogger.LogInformation("Converting IFC to glTF for revision {RevisionId}", revisionId);
-            try
-            {
-                // Create temp directory for glTF output
-                var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
-                Directory.CreateDirectory(tempDir);
-                var tempGltfPath = Path.Combine(tempDir, $"{Guid.NewGuid()}.glb");
-
-                // Export to glTF
-                var gltfOptions = new GltfExportOptions { Format = "glb", UseNames = false, Center = false };
-                var gltfResult = await scopedPythonService.ExportGltfAsync(fullIfcPath, tempGltfPath, gltfOptions);
-
-                if (gltfResult.Success)
-                {
-                    // Save glTF file to storage
-                    var gltfStoragePath = $"ifc-models/projects/{revision.ProjectId}/revisions/{revision.SequenceNumber}";
-                    var gltfFileName = $"{revision.VersionIdentifier}.glb";
-                    var savedGltfPath = await scopedFileStorage.SaveGltfFileAsync(tempGltfPath, gltfStoragePath, gltfFileName);
-
-                    // Update revision record
-                    revision.GltfFilePath = savedGltfPath;
-                    await scopedDbContext.SaveChangesAsync();
-
-                    scopedLogger.LogInformation("Successfully converted IFC to glTF for revision {RevisionId}: {GltfPath}",
-                        revisionId, savedGltfPath);
-
-                    // Cleanup temp file
-                    if (System.IO.File.Exists(tempGltfPath))
-                    {
-                        System.IO.File.Delete(tempGltfPath);
-                    }
-                }
-                else
-                {
-                    scopedLogger.LogWarning("glTF conversion failed for revision {RevisionId}: {Error}",
-                        revisionId, gltfResult.ErrorMessage);
-                    // Continue processing - glTF is optional
-                }
-            }
-            catch (Exception gltfEx)
-            {
-                scopedLogger.LogError(gltfEx, "Error during glTF conversion for revision {RevisionId}", revisionId);
-                // Continue processing - glTF is optional
-            }
-
-            // Step 2: Extract and store all element properties
+            // Step 1: Extract elements with metrics
             scopedLogger.LogInformation("Extracting element properties for revision {RevisionId}", revisionId);
+            session.ElementExtractionTimer.Start();
             try
             {
-                var elements = await scopedPythonService.ExtractAllElementsAsync(fullIfcPath);
+                var (elements, elementMetrics) = await scopedPythonService.ExtractAllElementsWithMetricsAsync(fullIfcPath, session);
 
                 // Set RevisionId for all elements
                 foreach (var element in elements)
@@ -646,20 +632,31 @@ public class RevisionsController : ControllerBase
 
                 await scopedElementService.StoreElementsAsync(revisionId, elements);
 
+                session.ElementExtractionTimer.Stop();
+
+                await scopedProcessingLogger.LogElementStatsAsync(
+                    revisionId,
+                    "IfcOpenShell",
+                    elements.Count,
+                    session.ElementCounts);
+
                 scopedLogger.LogInformation("Successfully stored {ElementCount} elements for revision {RevisionId}",
                     elements.Count, revisionId);
             }
             catch (Exception elemEx)
             {
-                scopedLogger.LogError(elemEx, "Failed to extract elements for revision {RevisionId}", revisionId);
-                // Continue processing - try to at least save the spatial tree
+                session.ElementExtractionTimer.Stop();
+                await scopedProcessingLogger.ErrorAsync(revisionId, "IfcOpenShell",
+                    "Failed to extract elements", elemEx);
+                throw; // Re-throw to mark as failed
             }
 
-            // Step 3: Extract and store spatial tree
+            // Step 2: Extract spatial tree with metrics
             scopedLogger.LogInformation("Extracting spatial tree for revision {RevisionId}", revisionId);
+            session.SpatialTreeTimer.Start();
             try
             {
-                var spatialTree = await scopedPythonService.ExtractSpatialTreeAsync(fullIfcPath, flat: false);
+                var (spatialTree, treeMetrics) = await scopedPythonService.ExtractSpatialTreeWithMetricsAsync(fullIfcPath);
 
                 if (spatialTree != null)
                 {
@@ -676,23 +673,116 @@ public class RevisionsController : ControllerBase
                     scopedDbContext.SpatialTrees.Add(spatialTreeRecord);
                     await scopedDbContext.SaveChangesAsync();
 
+                    session.SpatialTreeTimer.Stop();
+
+                    // Store tree stats
+                    if (treeMetrics?.Statistics?.TreeDepth != null)
+                        session.SpatialTreeDepth = treeMetrics.Statistics.TreeDepth.Value;
+                    if (treeMetrics?.Statistics?.NodeCount != null)
+                        session.SpatialTreeNodeCount = treeMetrics.Statistics.NodeCount.Value;
+
+                    await scopedProcessingLogger.InfoAsync(revisionId, "IfcOpenShell",
+                        "Successfully stored spatial tree",
+                        new { depth = session.SpatialTreeDepth, nodeCount = session.SpatialTreeNodeCount });
+
                     scopedLogger.LogInformation("Successfully stored spatial tree for revision {RevisionId}", revisionId);
                 }
                 else
                 {
+                    session.SpatialTreeTimer.Stop();
+                    await scopedProcessingLogger.WarningAsync(revisionId, "IfcOpenShell",
+                        "Spatial tree extraction returned null");
                     scopedLogger.LogWarning("Spatial tree extraction returned null for revision {RevisionId}", revisionId);
                 }
             }
             catch (Exception spatialEx)
             {
+                session.SpatialTreeTimer.Stop();
+                await scopedProcessingLogger.WarningAsync(revisionId, "IfcOpenShell",
+                    "Failed to extract spatial tree", spatialEx);
                 scopedLogger.LogError(spatialEx, "Failed to extract spatial tree for revision {RevisionId}", revisionId);
-                // Continue to mark as completed even if spatial tree fails
+                // Continue processing - spatial tree is optional
+            }
+
+            // Step 3: Convert IFC to glTF with metrics
+            scopedLogger.LogInformation("Converting IFC to glTF for revision {RevisionId}", revisionId);
+            session.GltfExportTimer.Start();
+            try
+            {
+                // Create temp directory for glTF output
+                var tempDir = Path.Combine(Path.GetTempPath(), "ifc-intelligence");
+                Directory.CreateDirectory(tempDir);
+                var tempGltfPath = Path.Combine(tempDir, $"{Guid.NewGuid()}.glb");
+
+                // Export to glTF with metrics
+                var gltfOptions = new GltfExportOptions { Format = "glb", UseNames = false, Center = false };
+                var (gltfResult, gltfMetrics) = await scopedPythonService.ExportGltfWithMetricsAsync(fullIfcPath, tempGltfPath, gltfOptions);
+
+                session.GltfExportTimer.Stop();
+
+                if (gltfResult.Success)
+                {
+                    // Save glTF file to storage
+                    var gltfStoragePath = $"ifc-models/projects/{revision.ProjectId}/revisions/{revision.SequenceNumber}";
+                    var gltfFileName = $"{revision.VersionIdentifier}.glb";
+                    var savedGltfPath = await scopedFileStorage.SaveGltfFileAsync(tempGltfPath, gltfStoragePath, gltfFileName);
+
+                    // Update revision record
+                    revision.GltfFilePath = savedGltfPath;
+                    await scopedDbContext.SaveChangesAsync();
+
+                    // Store glTF file size
+                    var gltfFileInfo = new FileInfo(tempGltfPath);
+                    if (gltfFileInfo.Exists)
+                    {
+                        session.GltfFileSizeBytes = gltfFileInfo.Length;
+                    }
+
+                    var gltfSizeMb = session.GltfFileSizeBytes.HasValue
+                        ? Math.Round(session.GltfFileSizeBytes.Value / (1024.0 * 1024.0), 2)
+                        : 0.0;
+                    await scopedProcessingLogger.InfoAsync(revisionId, "IfcOpenShell",
+                        "Successfully converted IFC to glTF",
+                        new { gltfPath = savedGltfPath, gltfSizeMb });
+
+                    scopedLogger.LogInformation("Successfully converted IFC to glTF for revision {RevisionId}: {GltfPath}",
+                        revisionId, savedGltfPath);
+
+                    // Cleanup temp file
+                    if (System.IO.File.Exists(tempGltfPath))
+                    {
+                        System.IO.File.Delete(tempGltfPath);
+                    }
+                }
+                else
+                {
+                    await scopedProcessingLogger.WarningAsync(revisionId, "IfcOpenShell",
+                        $"glTF conversion failed: {gltfResult.ErrorMessage}");
+                    scopedLogger.LogWarning("glTF conversion failed for revision {RevisionId}: {Error}",
+                        revisionId, gltfResult.ErrorMessage);
+                    // Continue processing - glTF is optional
+                }
+            }
+            catch (Exception gltfEx)
+            {
+                session.GltfExportTimer.Stop();
+                await scopedProcessingLogger.WarningAsync(revisionId, "IfcOpenShell",
+                    "Error during glTF conversion", gltfEx);
+                scopedLogger.LogError(gltfEx, "Error during glTF conversion for revision {RevisionId}", revisionId);
+                // Continue processing - glTF is optional
             }
 
             // Update status to completed
             revision.ProcessingStatus = "Completed";
             revision.ProcessingError = null;
             await scopedDbContext.SaveChangesAsync();
+
+            // Record success with metrics
+            await scopedMetricsCollector.RecordSuccessAsync(session);
+
+            await scopedProcessingLogger.InfoAsync(revisionId, "IfcOpenShell",
+                "Processing completed successfully",
+                new { totalTimeMs = session.TotalTimer.ElapsedMilliseconds });
 
             scopedLogger.LogInformation("Successfully completed processing for revision {RevisionId} ({VersionIdentifier})",
                 revisionId, revision.VersionIdentifier);
@@ -710,6 +800,15 @@ public class RevisionsController : ControllerBase
                     revision.ProcessingStatus = "Failed";
                     revision.ProcessingError = ex.Message;
                     await scopedDbContext.SaveChangesAsync();
+
+                    // Record failure with metrics
+                    if (session != null)
+                    {
+                        await scopedMetricsCollector.RecordFailureAsync(session, ex);
+                    }
+
+                    await scopedProcessingLogger.ErrorAsync(revisionId, "IfcOpenShell",
+                        "Processing failed", ex);
                 }
             }
             catch (Exception dbEx)

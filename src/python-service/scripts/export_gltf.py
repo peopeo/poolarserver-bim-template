@@ -83,6 +83,16 @@ def main():
     args = parser.parse_args()
 
     try:
+        import time
+        from datetime import datetime
+
+        # Initialize metrics
+        start_time = time.time()
+        metrics = {
+            "start_time": datetime.utcnow().isoformat(),
+            "timings": {}
+        }
+
         # Create exporter instance
         exporter = GltfExporter()
 
@@ -96,12 +106,22 @@ def main():
         )
 
         # Export IFC to glTF
+        export_start = time.time()
         result = exporter.export(
             ifc_file_path=args.input_file,
             output_path=args.output_file,
             format=args.format,
             options=options
         )
+        export_time_ms = int((time.time() - export_start) * 1000)
+
+        # Calculate metrics
+        metrics["timings"]["gltf_export_ms"] = export_time_ms
+        metrics["timings"]["total_ms"] = export_time_ms
+        metrics["end_time"] = datetime.utcnow().isoformat()
+        metrics["statistics"] = {
+            "gltf_file_size_bytes": result.file_size if result.success else None
+        }
 
         # Convert result to dict for JSON serialization
         result_dict = {
@@ -109,6 +129,7 @@ def main():
             "output_path": result.output_path,
             "file_size": result.file_size,
             "error_message": result.error_message,
+            "metrics": metrics
             # Omit stdout/stderr in JSON output (can be large)
         }
 

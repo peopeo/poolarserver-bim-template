@@ -42,11 +42,18 @@ builder.Services.AddMemoryCache(options =>
     options.SizeLimit = 1000; // Limit to 1000 cached entries
 });
 
+// Core IFC processing services
 builder.Services.AddScoped<IIfcService, IfcService>();
 builder.Services.AddScoped<IPythonIfcService, PythonIfcService>();
+// XBIM disabled due to .NET 9 compatibility issues - see XBIM_IMPLEMENTATION_STATUS.md
+// builder.Services.AddScoped<IXbimIfcService, XbimIfcService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IIfcElementService, IfcElementService>();
 builder.Services.AddScoped<VersionIdentifierService>();
+
+// Metrics and logging services
+builder.Services.AddScoped<IProcessingMetricsCollector, ProcessingMetricsCollector>();
+builder.Services.AddScoped<ProcessingLogger>();
 
 var app = builder.Build();
 

@@ -90,6 +90,16 @@ Examples:
         sys.exit(1)
 
     try:
+        import time
+        from datetime import datetime
+
+        # Initialize metrics
+        start_time = time.time()
+        metrics = {
+            "start_time": datetime.utcnow().isoformat(),
+            "timings": {}
+        }
+
         extractor = SpatialTreeExtractor()
 
         # Handle different extraction modes
@@ -114,6 +124,35 @@ Examples:
             # Extract full tree
             tree = extractor.extract_tree(str(input_path))
             result = tree.to_dict()
+
+            # Calculate tree depth and node count
+            def calculate_tree_stats(node, depth=0):
+                """Calculate max depth and total node count"""
+                max_depth = depth
+                node_count = 1  # Count this node
+
+                if "children" in node and node["children"]:
+                    for child in node["children"]:
+                        child_depth, child_nodes = calculate_tree_stats(child, depth + 1)
+                        max_depth = max(max_depth, child_depth)
+                        node_count += child_nodes
+
+                return max_depth, node_count
+
+            tree_depth, node_count = calculate_tree_stats(result)
+            metrics["statistics"] = {
+                "tree_depth": tree_depth,
+                "node_count": node_count
+            }
+
+        # Calculate timing
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        metrics["timings"]["spatial_tree_ms"] = elapsed_ms
+        metrics["timings"]["total_ms"] = elapsed_ms
+        metrics["end_time"] = datetime.utcnow().isoformat()
+
+        # Add metrics to result
+        result["metrics"] = metrics
 
         # Output JSON
         print(json.dumps(result, indent=2))

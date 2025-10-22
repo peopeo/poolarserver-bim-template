@@ -96,6 +96,12 @@ public class Revision
     public string? ProcessingError { get; set; }
 
     /// <summary>
+    /// Processing engine used for this revision (IfcOpenShell or Xbim)
+    /// </summary>
+    [MaxLength(20)]
+    public string? ProcessingEngine { get; set; }
+
+    /// <summary>
     /// Navigation property: All elements extracted from this revision
     /// </summary>
     public ICollection<IfcElement> Elements { get; set; } = new List<IfcElement>();

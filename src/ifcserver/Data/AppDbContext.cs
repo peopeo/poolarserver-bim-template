@@ -11,6 +11,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<IfcElement> IfcElements => Set<IfcElement>();
     public DbSet<SpatialTree> SpatialTrees => Set<SpatialTree>();
 
+    // Metrics and Logging
+    public DbSet<ProcessingMetrics> ProcessingMetrics => Set<ProcessingMetrics>();
+    public DbSet<ProcessingLog> ProcessingLogs => Set<ProcessingLog>();
+
     // Legacy models (deprecated, will be removed)
     public DbSet<ConversionJob> ConversionJobs => Set<ConversionJob>();
     public DbSet<IfcModel> IfcModels => Set<IfcModel>();
@@ -111,6 +115,73 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(s => s.TreeJson)
             .HasDatabaseName("IX_SpatialTrees_TreeJson")
             .HasMethod("gin");
+
+        // ============================================================
+        // Configure ProcessingMetrics
+        // ============================================================
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.RevisionId)
+            .IsUnique()
+            .HasDatabaseName("UQ_ProcessingMetrics_RevisionId");
+
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.ProcessingEngine)
+            .HasDatabaseName("IX_ProcessingMetrics_Engine");
+
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.Success)
+            .HasDatabaseName("IX_ProcessingMetrics_Success");
+
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.StartedAt)
+            .HasDatabaseName("IX_ProcessingMetrics_StartedAt");
+
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.TotalProcessingTimeMs)
+            .HasDatabaseName("IX_ProcessingMetrics_TotalProcessingTimeMs");
+
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasIndex(m => m.FileSizeBytes)
+            .HasDatabaseName("IX_ProcessingMetrics_FileSizeBytes");
+
+        // Relationship
+        modelBuilder.Entity<ProcessingMetrics>()
+            .HasOne(m => m.Revision)
+            .WithOne()
+            .HasForeignKey<ProcessingMetrics>(m => m.RevisionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ============================================================
+        // Configure ProcessingLogs
+        // ============================================================
+        modelBuilder.Entity<ProcessingLog>()
+            .HasIndex(l => l.RevisionId)
+            .HasDatabaseName("IX_ProcessingLogs_RevisionId");
+
+        modelBuilder.Entity<ProcessingLog>()
+            .HasIndex(l => l.ProcessingEngine)
+            .HasDatabaseName("IX_ProcessingLogs_Engine");
+
+        modelBuilder.Entity<ProcessingLog>()
+            .HasIndex(l => l.LogLevel)
+            .HasDatabaseName("IX_ProcessingLogs_LogLevel");
+
+        modelBuilder.Entity<ProcessingLog>()
+            .HasIndex(l => l.Timestamp)
+            .HasDatabaseName("IX_ProcessingLogs_Timestamp");
+
+        // GIN index for JSONB additional data
+        modelBuilder.Entity<ProcessingLog>()
+            .HasIndex(l => l.AdditionalData)
+            .HasDatabaseName("IX_ProcessingLogs_AdditionalData")
+            .HasMethod("gin");
+
+        // Relationship
+        modelBuilder.Entity<ProcessingLog>()
+            .HasOne(l => l.Revision)
+            .WithMany()
+            .HasForeignKey(l => l.RevisionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // ============================================================
         // Legacy model configurations (deprecated)

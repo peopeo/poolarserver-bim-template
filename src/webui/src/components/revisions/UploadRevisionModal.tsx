@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { uploadRevision } from '../../services/api/projectsApi';
+import { EngineSelector, ProcessingEngine } from '../shared/EngineSelector';
 
 interface UploadRevisionModalProps {
   darkMode: boolean;
@@ -11,6 +12,7 @@ interface UploadRevisionModalProps {
 export function UploadRevisionModal({ darkMode, projectId, onClose, onSuccess }: UploadRevisionModalProps): JSX.Element {
   const [file, setFile] = useState<File | null>(null);
   const [comment, setComment] = useState('');
+  const [selectedEngine, setSelectedEngine] = useState<ProcessingEngine>('IfcOpenShell');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -71,7 +73,7 @@ export function UploadRevisionModal({ darkMode, projectId, onClose, onSuccess }:
     try {
       setUploading(true);
       setError(null);
-      await uploadRevision(projectId, file, comment.trim() || undefined);
+      await uploadRevision(projectId, file, comment.trim() || undefined, selectedEngine);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload revision');
@@ -101,6 +103,16 @@ export function UploadRevisionModal({ darkMode, projectId, onClose, onSuccess }:
         )}
 
         <form onSubmit={handleSubmit}>
+          {/* Processing Engine Selector */}
+          <div className="mb-4">
+            <EngineSelector
+              selectedEngine={selectedEngine}
+              onSelect={setSelectedEngine}
+              darkMode={darkMode}
+              xbimEnabled={false}
+            />
+          </div>
+
           {/* File Upload */}
           <div className="mb-4">
             <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>

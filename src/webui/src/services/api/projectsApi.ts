@@ -314,12 +314,14 @@ export async function getRevision(projectId: number, revisionId: number): Promis
  * @param projectId - Project ID
  * @param file - IFC file to upload
  * @param comment - Optional comment for this revision
+ * @param engine - Processing engine to use ('IfcOpenShell' or 'Xbim'), defaults to 'IfcOpenShell'
  * @returns Promise resolving to upload response
  */
 export async function uploadRevision(
   projectId: number,
   file: File,
-  comment?: string
+  comment?: string,
+  engine?: 'IfcOpenShell' | 'Xbim'
 ): Promise<UploadRevisionResponse> {
   const formData = new FormData();
   formData.append('file', file);
@@ -327,7 +329,17 @@ export async function uploadRevision(
     formData.append('comment', comment);
   }
 
-  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/revisions/upload`, {
+  // Default to IfcOpenShell if not specified
+  const selectedEngine = engine || 'IfcOpenShell';
+
+  // Route to appropriate endpoint based on engine selection
+  // XBIM: /api/xbim/projects/{id}/revisions/upload (when available)
+  // IfcOpenShell: /api/projects/{id}/revisions/upload (current)
+  const endpoint = selectedEngine === 'Xbim'
+    ? `${API_BASE_URL}/xbim/projects/${projectId}/revisions/upload`
+    : `${API_BASE_URL}/projects/${projectId}/revisions/upload`;
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     body: formData,
   });

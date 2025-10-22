@@ -1,6 +1,7 @@
 import React from 'react';
 import { type RevisionSummary } from '../../services/api/projectsApi';
 import { RevisionStatusBadge } from './RevisionStatusBadge';
+import { RevisionMetricsPanel } from './RevisionMetricsPanel';
 
 interface RevisionCardProps {
   revision: RevisionSummary;
@@ -105,6 +106,15 @@ export function RevisionCard({ revision, darkMode, onSetActive, onEditComment, o
           </button>
         </div>
       </div>
+
+      {/* Metrics Panel - Only show for completed or failed revisions */}
+      {(revision.processingStatus === 'Completed' || revision.processingStatus === 'Failed') && (
+        <RevisionMetricsPanel
+          revisionId={revision.id}
+          darkMode={darkMode}
+          initiallyExpanded={false}
+        />
+      )}
     </div>
   );
 }

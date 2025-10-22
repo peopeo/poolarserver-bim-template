@@ -5,10 +5,11 @@ import { ThreeJsViewer } from './viewers/threejs-viewer';
 import { ViewerSelector } from './components/shared';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { MetricsDashboardPage } from './pages/MetricsDashboardPage';
 import { useDarkMode } from './hooks/useDarkMode';
 import type { ViewerType } from './types/threejs';
 
-type PageType = 'projects' | 'viewer' | 'project-detail';
+type PageType = 'projects' | 'viewer' | 'project-detail' | 'metrics';
 
 export default function Dashboard(): JSX.Element {
   const { darkMode, toggleDarkMode } = useDarkMode();
@@ -85,6 +86,20 @@ export default function Dashboard(): JSX.Element {
             >
               Viewer
             </button>
+            <button
+              onClick={() => setActivePage('metrics')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activePage === 'metrics'
+                  ? darkMode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-blue-600 text-white'
+                  : darkMode
+                  ? 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              Metrics
+            </button>
           </div>
         </div>
 
@@ -99,6 +114,8 @@ export default function Dashboard(): JSX.Element {
               onBack={handleBackToProjects}
               onViewRevisionIn3D={handleViewRevisionIn3D}
             />
+          ) : activePage === 'metrics' ? (
+            <MetricsDashboardPage darkMode={darkMode} />
           ) : (
             <div className="h-full flex flex-col">
               {/* Viewer Selector */}
