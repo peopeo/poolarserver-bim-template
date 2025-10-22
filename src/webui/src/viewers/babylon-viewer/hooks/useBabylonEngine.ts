@@ -42,7 +42,7 @@ export function useBabylonEngine(canvas: HTMLCanvasElement | null): UseBabylonEn
           const webGPUEngine = new WebGPUEngine(canvas, {
             adaptToDeviceRatio: false, // Manual control for better performance
             antialias: false, // Disable for performance (can enable FXAA later if needed)
-            stencil: false, // Not needed for basic rendering
+            stencil: true, // REQUIRED for HighlightLayer
             powerPreference: 'high-performance'
           });
 
@@ -61,7 +61,7 @@ export function useBabylonEngine(canvas: HTMLCanvasElement | null): UseBabylonEn
           console.log('⚠️ WebGPU not supported - falling back to WebGL');
           newEngine = new Engine(canvas, false, { // antialias: false for performance
             preserveDrawingBuffer: false, // Not needed, saves memory
-            stencil: false, // Not needed for basic rendering
+            stencil: true, // REQUIRED for HighlightLayer
             antialias: false, // Disable for performance
             powerPreference: 'high-performance',
             depth: true,
@@ -148,13 +148,10 @@ function setupScene(scene: Scene): void {
   scene.autoClearDepthAndStencil = false; // Manual control
   scene.blockMaterialDirtyMechanism = true; // Reduce material update checks
 
-  // Enable frustum culling for better performance
-  scene.frustumCulling = true;
-
   // Reduce rendering overhead
   scene.constantlyUpdateMeshUnderPointer = false; // Only update on click
   scene.skipPointerMovePicking = true; // Don't pick on every mouse move
-  scene.skipFrustumClipping = false; // Keep frustum culling
+  scene.skipFrustumClipping = false; // Keep frustum culling enabled
 
   // Disable unnecessary features
   scene.postProcessesEnabled = false; // No post-processing for performance

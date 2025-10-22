@@ -17,6 +17,9 @@ interface SpatialTreePanelProps {
 
   /** Dark mode */
   darkMode?: boolean;
+
+  /** Embedded mode (no button, always show tree) - for use in sidebars */
+  embedded?: boolean;
 }
 
 interface TreeNodeProps {
@@ -111,13 +114,36 @@ function TreeNode({ node, level, onSelectNode, darkMode }: TreeNodeProps) {
 export function SpatialTreePanel({
   spatialTree,
   onSelectNode,
-  darkMode = false
+  darkMode = false,
+  embedded = false
 }: SpatialTreePanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const hasSpatialTree = spatialTree !== null;
 
-  console.log('SpatialTreePanel render - spatialTree:', spatialTree, 'hasSpatialTree:', hasSpatialTree);
+  console.log('SpatialTreePanel render - spatialTree:', spatialTree, 'hasSpatialTree:', hasSpatialTree, 'embedded:', embedded);
 
+  // In embedded mode, just render the tree directly
+  if (embedded) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        {hasSpatialTree ? (
+          <TreeNode
+            node={spatialTree}
+            level={0}
+            onSelectNode={onSelectNode}
+            darkMode={darkMode}
+          />
+        ) : (
+          <div className="p-8 text-center text-gray-500">
+            <Building2 size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="text-sm">No spatial hierarchy data available</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Normal floating mode
   return (
     <>
       {!isOpen ? (

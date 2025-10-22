@@ -129,11 +129,14 @@ export class BabylonSelectionManager {
    * Select mesh by IFC GUID
    */
   selectByGuid(guid: string): SelectionResult {
+    console.log(`🔍 Searching for mesh with GUID: ${guid}`);
+
     const mesh = this.scene.meshes.find(
       (m) => m.metadata?.ifcGuid === guid
     ) as AbstractMesh;
 
     if (mesh) {
+      console.log(`✅ Found mesh for GUID ${guid}: ${mesh.name}`);
       this.clearSelection();
       this.highlightMesh(mesh);
 
@@ -143,6 +146,19 @@ export class BabylonSelectionManager {
         point: null,
         normal: null
       };
+    }
+
+    // Not found - log details for debugging
+    console.log(`❌ No mesh found for GUID: ${guid}`);
+    console.log(`   Total meshes in scene: ${this.scene.meshes.length}`);
+
+    // Sample first few meshes to see GUID format
+    const sampleMeshes = this.scene.meshes.slice(0, 5).filter(m => m.metadata?.ifcGuid);
+    if (sampleMeshes.length > 0) {
+      console.log(`   Sample mesh GUIDs:`, sampleMeshes.map(m => ({
+        name: m.name,
+        guid: m.metadata?.ifcGuid
+      })));
     }
 
     return {

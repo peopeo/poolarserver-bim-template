@@ -5,7 +5,7 @@
  * - Section planes
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { Scene, ArcRotateCamera, Nullable } from '@babylonjs/core';
 import { AxesViewer, Vector3, Color3 } from '@babylonjs/core';
 
@@ -40,18 +40,28 @@ export function useBabylonGizmos(
     };
   }, [scene]);
 
-  const toggleAxes = () => {
-    if (axesViewer) {
-      if (axesVisible) {
-        axesViewer.dispose();
-        setAxesViewer(null);
-      } else {
-        const axes = new AxesViewer(scene!, 2);
-        setAxesViewer(axes);
-      }
-      setAxesVisible(!axesVisible);
+  const toggleAxes = useCallback(() => {
+    if (!scene) {
+      console.log('⚠️ Cannot toggle axes: scene not ready');
+      return;
     }
-  };
+
+    console.log(`🔄 Toggle axes called - current state: visible=${axesVisible}, viewer=${axesViewer ? 'exists' : 'null'}`);
+
+    if (axesVisible && axesViewer) {
+      // Hide: dispose the current axes
+      console.log('🔲 Hiding axes...');
+      axesViewer.dispose();
+      setAxesViewer(null);
+      setAxesVisible(false);
+    } else {
+      // Show: create new axes
+      console.log('✅ Showing axes...');
+      const axes = new AxesViewer(scene, 2);
+      setAxesViewer(axes);
+      setAxesVisible(true);
+    }
+  }, [scene, axesVisible, axesViewer]);
 
   return {
     axesViewer,

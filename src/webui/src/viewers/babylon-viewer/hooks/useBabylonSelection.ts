@@ -15,6 +15,9 @@ export interface UseBabylonSelectionOptions {
 
   /** Canvas element */
   canvas: HTMLCanvasElement | null;
+
+  /** Measurement mode - disable selection when measuring */
+  measurementMode?: 'none' | 'distance' | 'area';
 }
 
 export interface UseBabylonSelectionResult {
@@ -38,7 +41,7 @@ export interface UseBabylonSelectionResult {
  * Hook for mesh selection in Babylon.js
  */
 export function useBabylonSelection(options: UseBabylonSelectionOptions): UseBabylonSelectionResult {
-  const { scene, canvas } = options;
+  const { scene, canvas, measurementMode = 'none' } = options;
 
   const [selectedElement, setSelectedElement] = useState<BIMElement | null>(null);
   const [selectedMesh, setSelectedMesh] = useState<AbstractMesh | null>(null);
@@ -52,34 +55,69 @@ export function useBabylonSelection(options: UseBabylonSelectionOptions): UseBab
     }
   }, [scene]);
 
-  // Handle click events
+  // Handle click events (distinguish between click and drag)
   useEffect(() => {
     if (!scene || !canvas || !selectionManagerRef.current) return;
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!selectionManagerRef.current) return;
+    let pointerDownPosition: { x: number; y: number } | null = null;
 
-      // Only handle left click
+    const handlePointerDown = (event: PointerEvent) => {
+      // Only track left button
       if (event.button !== 0) return;
 
-      const result = selectionManagerRef.current.selectMesh(event, canvas);
+      // Skip if measurement mode is active
+      if (measurementMode !== 'none') return;
 
-      setSelectedElement(result.element);
-      setSelectedMesh(result.mesh);
+      // Store the initial pointer position
+      pointerDownPosition = { x: event.clientX, y: event.clientY };
+    };
 
-      if (result.element) {
-        console.log('✅ Selected element:', result.element.type, result.element.name);
-      } else {
-        console.log('Selection cleared');
+    const handlePointerUp = (event: PointerEvent) => {
+      if (!selectionManagerRef.current || !pointerDownPosition) return;
+
+      // Only handle left button
+      if (event.button !== 0) return;
+
+      // Skip if measurement mode is active
+      if (measurementMode !== 'none') {
+        pointerDownPosition = null;
+        return;
       }
+
+      // Calculate movement distance
+      const dx = event.clientX - pointerDownPosition.x;
+      const dy = event.clientY - pointerDownPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Only select if minimal movement (< 5px = click, not drag)
+      // This prevents selection during camera rotation/panning
+      const CLICK_THRESHOLD = 5;
+
+      if (distance < CLICK_THRESHOLD) {
+        const result = selectionManagerRef.current.selectMesh(event, canvas);
+
+        setSelectedElement(result.element);
+        setSelectedMesh(result.mesh);
+
+        if (result.element) {
+          console.log('✅ Selected element:', result.element.type, result.element.name);
+        } else {
+          console.log('Selection cleared');
+        }
+      }
+
+      // Clear the stored position
+      pointerDownPosition = null;
     };
 
     canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointerup', handlePointerUp);
 
     return () => {
       canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [scene, canvas]);
+  }, [scene, canvas, measurementMode]);
 
   const clearSelection = useCallback(() => {
     if (selectionManagerRef.current) {

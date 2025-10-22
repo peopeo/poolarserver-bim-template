@@ -36,6 +36,8 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [showTestCube, setShowTestCube] = useState(true);
   const [spatialTree, setSpatialTree] = useState<SpatialNode | null>(null);
+  const [isLoadingSpatialTree, setIsLoadingSpatialTree] = useState(false);
+  const [spatialTreeError, setSpatialTreeError] = useState<string | null>(null);
   const [elementProperties, setElementProperties] = useState<IfcElementProperties | null>(null);
   const [isLoadingProperties, setIsLoadingProperties] = useState(false);
   const [propertyError, setPropertyError] = useState<string | null>(null);
@@ -51,34 +53,59 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
   // Initialize model loader
   const { loadModel, status: loadStatus, progress, statusMessage, error: loadError } = useBabylonModelLoader(scene);
 
-  // Initialize selection
+  // Initialize measurement tools (before selection, so we can pass measurementMode)
+  const { measurementMode, setMeasurementMode, clearMeasurements, measurements } = useBabylonMeasurement(scene, canvas, camera);
+
+  // Initialize selection (with measurement mode to disable selection during measurement)
   const { selectedElement, selectedMesh, clearSelection, selectByGuid, hasSelection } = useBabylonSelection({
     scene,
-    canvas
+    canvas,
+    measurementMode
   });
 
   // Initialize gizmos and advanced features
   const { axesViewer, toggleAxes, axesVisible } = useBabylonGizmos(scene, camera);
-
-  // Initialize measurement tools
-  const { measurementMode, setMeasurementMode, clearMeasurements, measurements } = useBabylonMeasurement(scene, canvas);
 
   // Handle canvas ready
   const handleCanvasReady = useCallback((canvasElement: HTMLCanvasElement) => {
     setCanvas(canvasElement);
   }, []);
 
+
+  // TEMPORARY: Debug measurement mode state
+  useEffect(() => {
+    console.log(`🔍 Measurement mode changed: "${measurementMode}"`);
+  }, [measurementMode]);
+
   // Load spatial tree when model is loaded
   useEffect(() => {
-    if (!projectId || !revisionId) return;
+    if (!projectId || !revisionId) {
+      setSpatialTree(null);
+      setSpatialTreeError(null);
+      return;
+    }
 
     const loadSpatialTree = async () => {
+      setIsLoadingSpatialTree(true);
+      setSpatialTreeError(null);
+
       try {
+        console.log(`📂 Loading spatial tree for project ${projectId}, revision ${revisionId}`);
         const tree = await getRevisionSpatialTree(projectId, revisionId);
+
+        if (!tree) {
+          throw new Error('Spatial tree is empty');
+        }
+
         setSpatialTree(tree);
-        console.log('✅ Spatial tree loaded');
+        console.log('✅ Spatial tree loaded successfully:', tree);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load spatial tree';
         console.error('❌ Failed to load spatial tree:', error);
+        setSpatialTreeError(errorMessage);
+        setSpatialTree(null);
+      } finally {
+        setIsLoadingSpatialTree(false);
       }
     };
 
@@ -112,12 +139,43 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
   }, [selectedElement, projectId, revisionId]);
 
   // Handle spatial tree node selection
-  const handleSpatialNodeSelect = useCallback((node: SpatialNode) => {
-    if (node.global_id) {
-      selectByGuid(node.global_id);
-      console.log('📍 Selected from spatial tree:', node.ifc_type, node.name || node.long_name);
+  const handleSpatialNodeSelect = useCallback(async (node: SpatialNode) => {
+    if (!node.global_id || !projectId || !revisionId) {
+      console.warn('Cannot load properties: missing global_id, projectId, or revisionId');
+      return;
     }
-  }, [selectByGuid]);
+
+    console.log('📍 Selected from spatial tree:', node.ifc_type, node.name || node.long_name);
+
+    // Skip spatial containers (they don't have geometry properties)
+    const spatialTypes = ['IfcProject', 'IfcSite', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace', 'IfcZone'];
+    if (spatialTypes.includes(node.ifc_type)) {
+      console.log(`⚠️ Skipping property fetch for spatial element: ${node.ifc_type}`);
+      setElementProperties(null);
+      setPropertyError(`${node.ifc_type} elements don't have detailed properties`);
+      return;
+    }
+
+    // Try to highlight the mesh in 3D (if it exists)
+    selectByGuid(node.global_id);
+
+    // Fetch properties from API (works whether or not mesh is found)
+    try {
+      setIsLoadingProperties(true);
+      setPropertyError(null);
+      console.log(`🔍 Fetching properties for: ${node.global_id} (${node.ifc_type})`);
+
+      const properties = await getRevisionElementProperties(projectId, revisionId, node.global_id);
+      setElementProperties(properties);
+      console.log('✅ Properties loaded for:', node.ifc_type);
+    } catch (error) {
+      console.error('❌ Failed to load properties:', error);
+      setPropertyError(error instanceof Error ? error.message : 'Failed to load properties');
+      setElementProperties(null);
+    } finally {
+      setIsLoadingProperties(false);
+    }
+  }, [selectByGuid, projectId, revisionId]);
 
   // Load model from API when projectId and revisionId are provided
   useEffect(() => {
@@ -250,7 +308,7 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
       />
 
       {/* Collapsible Left Sidebar - Spatial Tree */}
-      {spatialTree && (
+      {(projectId && revisionId) && (
         <div className={`absolute left-0 top-0 h-full transition-all duration-300 z-10 ${
           sidebarOpen ? 'w-80' : 'w-0'
         }`}>
@@ -264,17 +322,39 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
               <h3 className="font-semibold text-sm">Spatial Hierarchy</h3>
             </div>
 
-            <SpatialTreePanel
-              spatialTree={spatialTree}
-              onSelectNode={handleSpatialNodeSelect}
-              darkMode={darkMode}
-            />
+            {/* Loading State */}
+            {isLoadingSpatialTree && (
+              <div className="p-4 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-500">Loading spatial tree...</p>
+              </div>
+            )}
+
+            {/* Error State */}
+            {spatialTreeError && !isLoadingSpatialTree && (
+              <div className="p-4">
+                <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-400 px-4 py-3 rounded">
+                  <p className="font-bold text-sm">Error loading spatial tree</p>
+                  <p className="text-xs mt-1">{spatialTreeError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Spatial Tree */}
+            {spatialTree && !isLoadingSpatialTree && (
+              <SpatialTreePanel
+                spatialTree={spatialTree}
+                onSelectNode={handleSpatialNodeSelect}
+                darkMode={darkMode}
+                embedded={true}
+              />
+            )}
           </div>
         </div>
       )}
 
       {/* Left Sidebar Toggle Button */}
-      {spatialTree && (
+      {(projectId && revisionId) && (
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className={`absolute ${
@@ -290,7 +370,7 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
       )}
 
       {/* Collapsible Right Sidebar - Properties Panel */}
-      {hasSelection && (
+      {(hasSelection || elementProperties || isLoadingProperties || propertyError) && (
         <div className={`absolute right-0 top-0 h-full transition-all duration-300 z-10 ${
           propertiesSidebarOpen ? 'w-96' : 'w-0'
         }`}>
@@ -302,7 +382,11 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
               properties={elementProperties}
               isLoading={isLoadingProperties}
               error={propertyError}
-              onClose={clearSelection}
+              onClose={() => {
+                clearSelection();
+                setElementProperties(null);
+                setPropertyError(null);
+              }}
               darkMode={darkMode}
             />
           </div>
@@ -310,7 +394,7 @@ export function BabylonViewer({ projectId, revisionId, darkMode = false }: Babyl
       )}
 
       {/* Right Sidebar Toggle Button */}
-      {hasSelection && (
+      {(hasSelection || elementProperties || isLoadingProperties || propertyError) && (
         <button
           onClick={() => setPropertiesSidebarOpen(!propertiesSidebarOpen)}
           className={`absolute ${
