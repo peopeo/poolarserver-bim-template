@@ -292,6 +292,10 @@ public class XbimRevisionsController : ControllerBase
             return StatusCode(500, new { message = "Failed to save IFC file", error = ex.Message });
         }
 
+        // Convert relative path to full path for background processing
+        var fullIfcPath = _fileStorage.GetFullPath(savedIfcPath);
+        _logger.LogInformation("[XBIM] Full physical path: {FullPath}", fullIfcPath);
+
         // Create revision record
         var revision = new Revision
         {
@@ -315,8 +319,42 @@ public class XbimRevisionsController : ControllerBase
 
         // Start background processing with metrics
         var revisionId = revision.Id;
-        var fileInfo = new FileInfo(savedIfcPath);
-        _ = Task.Run(async () => await ProcessRevisionWithMetricsAsync(revisionId, savedIfcPath, fileInfo.Length));
+        var fileInfo = new FileInfo(fullIfcPath);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                _logger.LogInformation("[XBIM] ========== BACKGROUND TASK STARTED for revision {RevisionId} ==========", revisionId);
+                await ProcessRevisionWithMetricsAsync(revisionId, fullIfcPath, fileInfo.Length);
+                _logger.LogInformation("[XBIM] ========== BACKGROUND TASK COMPLETED for revision {RevisionId} ==========", revisionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[XBIM] ========== CRITICAL: BACKGROUND TASK FAILED for revision {RevisionId} ==========", revisionId);
+                _logger.LogError(ex, "[XBIM] Exception Type: {ExceptionType}", ex.GetType().FullName);
+                _logger.LogError(ex, "[XBIM] Exception Message: {Message}", ex.Message);
+                _logger.LogError(ex, "[XBIM] Stack Trace: {StackTrace}", ex.StackTrace);
+
+                // Try to update revision status in database
+                try
+                {
+                    using var errorScope = _serviceProvider.CreateScope();
+                    var errorDbContext = errorScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var failedRevision = await errorDbContext.Revisions.FindAsync(revisionId);
+                    if (failedRevision != null)
+                    {
+                        failedRevision.ProcessingStatus = "Failed";
+                        failedRevision.ProcessingError = $"Background processing failed: {ex.Message}\n\nException Type: {ex.GetType().FullName}";
+                        await errorDbContext.SaveChangesAsync();
+                        _logger.LogInformation("[XBIM] Updated revision {RevisionId} status to Failed", revisionId);
+                    }
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogError(dbEx, "[XBIM] Failed to update error status for revision {RevisionId}", revisionId);
+                }
+            }
+        });
 
         var response = new UploadRevisionResponse
         {
@@ -371,17 +409,35 @@ public class XbimRevisionsController : ControllerBase
     /// </summary>
     private async Task ProcessRevisionWithMetricsAsync(int revisionId, string ifcFilePath, long fileSizeBytes)
     {
+        _logger.LogInformation("[XBIM-BG] ProcessRevisionWithMetricsAsync entered for revision {RevisionId}", revisionId);
+
         // Create a new scope for background work
+        _logger.LogInformation("[XBIM-BG] Creating service scope...");
         using var scope = _serviceProvider.CreateScope();
+
+        _logger.LogInformation("[XBIM-BG] Resolving AppDbContext...");
         var scopedDbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        _logger.LogInformation("[XBIM-BG] Resolving IXbimIfcService...");
         var scopedXbimService = scope.ServiceProvider.GetRequiredService<IXbimIfcService>();
+
+        _logger.LogInformation("[XBIM-BG] Resolving IFileStorageService...");
         var scopedFileStorage = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
+
+        _logger.LogInformation("[XBIM-BG] Resolving IIfcElementService...");
         var scopedElementService = scope.ServiceProvider.GetRequiredService<IIfcElementService>();
+
+        _logger.LogInformation("[XBIM-BG] Resolving IProcessingMetricsCollector...");
         var scopedMetricsCollector = scope.ServiceProvider.GetRequiredService<IProcessingMetricsCollector>();
+
+        _logger.LogInformation("[XBIM-BG] Resolving ILogger<ProcessingLogger>...");
         var scopedProcessingLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessingLogger>>();
 
         // Get processing logger
+        _logger.LogInformation("[XBIM-BG] Creating ProcessingLogger...");
         var processingLogger = new ProcessingLogger(scopedMetricsCollector, scopedProcessingLogger);
+
+        _logger.LogInformation("[XBIM-BG] All services resolved successfully! Proceeding with processing...");
 
         // Start metrics session
         var fileInfo = new FileInfo(ifcFilePath);
