@@ -489,7 +489,7 @@ public class XbimIfcService : IXbimIfcService
             Children = new List<SpatialNode>()
         };
 
-        // Add contained elements
+        // Add contained elements (for spatial structure elements)
         if (obj is IIfcSpatialStructureElement spatialElement)
         {
             foreach (var rel in spatialElement.ContainsElements)
@@ -507,16 +507,19 @@ public class XbimIfcService : IXbimIfcService
                     }
                 }
             }
+        }
 
-            // Recursively add child spaces
-            foreach (var rel in spatialElement.IsDecomposedBy)
+        // Recursively add decomposed objects (works for both IIfcProject and IIfcSpatialStructureElement)
+        // IIfcProject uses IsDecomposedBy to link to IfcSite
+        // IfcSite/Building/Storey also use IsDecomposedBy for hierarchy
+        foreach (var rel in obj.IsDecomposedBy)
+        {
+            foreach (var relatedObject in rel.RelatedObjects)
             {
-                foreach (var relatedObject in rel.RelatedObjects)
+                // Include both spatial elements AND projects in the tree
+                if (relatedObject is IIfcSpatialStructureElement || relatedObject is IIfcProject)
                 {
-                    if (relatedObject is IIfcSpatialStructureElement)
-                    {
-                        node.Children.Add(BuildSpatialNode(relatedObject));
-                    }
+                    node.Children.Add(BuildSpatialNode(relatedObject));
                 }
             }
         }

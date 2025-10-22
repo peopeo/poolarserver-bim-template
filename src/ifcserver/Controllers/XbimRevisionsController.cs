@@ -574,10 +574,12 @@ public class XbimRevisionsController : ControllerBase
             await processingLogger.InfoAsync(revisionId, "Xbim", "Starting element extraction");
             try
             {
+                session.ElementExtractionTimer.Start();
                 var (elements, elementMetrics) = await scopedXbimService.ExtractAllElementsWithMetricsAsync(
                     fullIfcPath,
                     session
                 );
+                session.ElementExtractionTimer.Stop();
 
                 // Set RevisionId for all elements
                 foreach (var element in elements)
@@ -612,7 +614,9 @@ public class XbimRevisionsController : ControllerBase
             await processingLogger.InfoAsync(revisionId, "Xbim", "Starting spatial tree extraction");
             try
             {
+                session.SpatialTreeTimer.Start();
                 var (spatialTree, treeMetrics) = await scopedXbimService.ExtractSpatialTreeWithMetricsAsync(fullIfcPath);
+                session.SpatialTreeTimer.Stop();
 
                 if (spatialTree != null)
                 {
