@@ -153,7 +153,7 @@ public class XbimRevisionsController : ControllerBase
     /// Get all elements for an XBIM-processed revision
     /// </summary>
     [HttpGet("{id}/elements")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<IfcElementResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetElements(int projectId, int id)
     {
@@ -169,7 +169,20 @@ public class XbimRevisionsController : ControllerBase
         }
 
         var elements = await _elementService.GetModelElementsAsync(id);
-        return Ok(elements);
+
+        // Map to DTOs to prevent circular reference issues
+        var elementDtos = elements.Select(e => new IfcElementResponse
+        {
+            Id = e.Id,
+            RevisionId = e.RevisionId,
+            IfcGuid = e.GlobalId,
+            ElementType = e.ElementType,
+            Name = e.Name,
+            Description = e.Description
+        }).ToList();
+
+        _logger.LogInformation("[XBIM] Returning {Count} elements", elementDtos.Count);
+        return Ok(elementDtos);
     }
 
     /// <summary>
@@ -473,10 +486,21 @@ public class XbimRevisionsController : ControllerBase
             await processingLogger.InfoAsync(revisionId, "Xbim", "Attempting glTF conversion");
             try
             {
+                // Generate proper glTF storage path
+                var gltfRelativePath = $"gltf-models/projects/{revision.ProjectId}/revisions/{revision.SequenceNumber}-xbim/{revision.VersionIdentifier}.glb";
+                var gltfFullPath = scopedFileStorage.GetFullPath(gltfRelativePath);
+
+                // Ensure directory exists
+                var gltfDirectory = Path.GetDirectoryName(gltfFullPath);
+                if (gltfDirectory != null)
+                {
+                    Directory.CreateDirectory(gltfDirectory);
+                }
+
                 session.GltfExportTimer.Start();
                 var (gltfResult, gltfMetrics) = await scopedXbimService.ExportGltfWithMetricsAsync(
                     fullIfcPath,
-                    Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.glb")
+                    gltfFullPath
                 );
                 session.GltfExportTimer.Stop();
 
@@ -484,6 +508,9 @@ public class XbimRevisionsController : ControllerBase
                 {
                     await processingLogger.InfoAsync(revisionId, "Xbim", "glTF conversion successful");
                     session.GltfFileSizeBytes = gltfResult.FileSize;
+
+                    // Store relative path in database
+                    revision.GltfFilePath = gltfRelativePath;
                 }
                 else
                 {
