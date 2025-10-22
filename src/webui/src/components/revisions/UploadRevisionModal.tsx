@@ -109,7 +109,7 @@ export function UploadRevisionModal({ darkMode, projectId, onClose, onSuccess }:
               selectedEngine={selectedEngine}
               onSelect={setSelectedEngine}
               darkMode={darkMode}
-              xbimEnabled={false}
+              xbimEnabled={true}
             />
           </div>
 

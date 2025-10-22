@@ -19,7 +19,7 @@ interface EngineSelectorProps {
   /** Dark mode state */
   darkMode?: boolean;
 
-  /** Whether XBIM option is enabled (default: false - waiting for .NET 9 compatibility fix) */
+  /** Whether XBIM option is enabled (default: true - XBIM is now available on .NET 9) */
   xbimEnabled?: boolean;
 }
 
@@ -27,7 +27,7 @@ export function EngineSelector({
   selectedEngine,
   onSelect,
   darkMode = false,
-  xbimEnabled = false,
+  xbimEnabled = true,
 }: EngineSelectorProps) {
   return (
     <div className="space-y-2">
@@ -87,7 +87,7 @@ export function EngineSelector({
           }`}
           title={
             !xbimEnabled
-              ? 'XBIM engine currently unavailable (waiting for .NET 9 compatibility fix)'
+              ? 'XBIM engine currently unavailable'
               : undefined
           }
         >
@@ -151,8 +151,8 @@ export function EngineSelector({
             </svg>
             <span>
               {xbimEnabled
-                ? 'Native C# IFC processing with XBIM Toolkit. Optimized for .NET environments with potential performance benefits.'
-                : 'Native C# IFC processing with XBIM Toolkit. Currently unavailable - waiting for .NET 9 compatibility updates.'}
+                ? 'Native C# IFC processing with XBIM Toolkit 6.0 on .NET 9. Optimized for .NET environments with potential performance benefits.'
+                : 'Native C# IFC processing with XBIM Toolkit. Currently unavailable.'}
             </span>
           </div>
         )}
