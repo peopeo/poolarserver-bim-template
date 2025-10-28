@@ -124,9 +124,9 @@ export function ProjectDetailPage({ darkMode, projectId, onBack, onViewRevisionI
   }
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+    <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
       {/* Header */}
-      <div className={`${darkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'} px-6 py-4`}>
+      <div className={`${darkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'} px-6 py-4 flex-shrink-0`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -160,7 +160,7 @@ export function ProjectDetailPage({ darkMode, projectId, onBack, onViewRevisionI
       </div>
 
       {/* Content */}
-      <div className="p-6">
+      <div className="flex-1 overflow-y-auto p-6">
         {/* Empty State */}
         {project.revisions.length === 0 && (
           <div className={`text-center py-12 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg`}>

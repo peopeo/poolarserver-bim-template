@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Engine, WebGPUEngine, Scene, Color4, Color3, HemisphericLight, DirectionalLight, Vector3 } from '@babylonjs/core';
+import { Engine, Scene, Color4, Color3, HemisphericLight, DirectionalLight, Vector3 } from '@babylonjs/core';
 
-export type RenderingAPI = 'webgpu' | 'webgl';
+export type RenderingAPI = 'webgl';
 
 interface UseBabylonEngineReturn {
-  engine: Engine | WebGPUEngine | null;
+  engine: Engine | null;
   scene: Scene | null;
   renderingAPI: RenderingAPI;
   isReady: boolean;
 }
 
 /**
- * Initialize Babylon.js engine with WebGPU support (fallback to WebGL)
+ * Initialize Babylon.js engine with WebGL
  *
- * This hook attempts to use WebGPU first for better performance,
- * automatically falling back to WebGL if WebGPU is not supported.
+ * This hook initializes the Babylon.js engine using WebGL.
  */
 export function useBabylonEngine(canvas: HTMLCanvasElement | null): UseBabylonEngineReturn {
-  const [engine, setEngine] = useState<Engine | WebGPUEngine | null>(null);
+  const [engine, setEngine] = useState<Engine | null>(null);
   const [scene, setScene] = useState<Scene | null>(null);
   const [renderingAPI, setRenderingAPI] = useState<RenderingAPI>('webgl');
   const [isReady, setIsReady] = useState(false);
@@ -28,54 +27,28 @@ export function useBabylonEngine(canvas: HTMLCanvasElement | null): UseBabylonEn
     }
 
     let isMounted = true;
-    let engineInstance: Engine | WebGPUEngine | null = null;
+    let engineInstance: Engine | null = null;
 
     const initializeEngine = async () => {
       try {
-        let newEngine: Engine | WebGPUEngine;
+        // Initialize WebGL engine
+        console.log('🔧 Initializing WebGL engine');
+        const newEngine = new Engine(canvas, false, { // antialias: false for performance
+          preserveDrawingBuffer: false, // Not needed, saves memory
+          stencil: true, // REQUIRED for HighlightLayer
+          antialias: false, // Disable for performance
+          powerPreference: 'high-performance',
+          depth: true,
+          premultipliedAlpha: false
+        });
 
-        // Try WebGPU first (Babylon.js has production-ready support!)
-        const webGPUSupported = await WebGPUEngine.IsSupportedAsync;
+        // Performance optimizations for WebGL
+        newEngine.enableOfflineSupport = false;
+        newEngine.doNotHandleContextLost = true;
 
-        if (webGPUSupported) {
-          console.log('✅ WebGPU supported - initializing WebGPUEngine');
-          const webGPUEngine = new WebGPUEngine(canvas, {
-            adaptToDeviceRatio: false, // Manual control for better performance
-            antialias: false, // Disable for performance (can enable FXAA later if needed)
-            stencil: true, // REQUIRED for HighlightLayer
-            powerPreference: 'high-performance'
-          });
-
-          await webGPUEngine.initAsync();
-          newEngine = webGPUEngine;
-
-          // Performance optimizations
-          newEngine.enableOfflineSupport = false;
-          newEngine.doNotHandleContextLost = true; // Faster, we handle it ourselves
-
-          if (isMounted) {
-            setRenderingAPI('webgpu');
-            console.log('✅ WebGPU engine initialized successfully');
-          }
-        } else {
-          console.log('⚠️ WebGPU not supported - falling back to WebGL');
-          newEngine = new Engine(canvas, false, { // antialias: false for performance
-            preserveDrawingBuffer: false, // Not needed, saves memory
-            stencil: true, // REQUIRED for HighlightLayer
-            antialias: false, // Disable for performance
-            powerPreference: 'high-performance',
-            depth: true,
-            premultipliedAlpha: false
-          });
-
-          // Performance optimizations for WebGL
-          newEngine.enableOfflineSupport = false;
-          newEngine.doNotHandleContextLost = true;
-
-          if (isMounted) {
-            setRenderingAPI('webgl');
-            console.log('✅ WebGL engine initialized successfully');
-          }
+        if (isMounted) {
+          setRenderingAPI('webgl');
+          console.log('✅ WebGL engine initialized successfully');
         }
 
         // Hardware scaling for better performance (render at lower resolution)

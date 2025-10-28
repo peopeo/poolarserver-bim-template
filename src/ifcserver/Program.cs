@@ -22,15 +22,21 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Increase max request body size to 500 MB for large IFC files
+// Configure max request body size from appsettings.json
+// Default: 5 GB for large IFC files (configurable via FileUpload:MaxFileSizeInBytes)
+var maxFileSizeInBytes = builder.Configuration.GetValue<long>("FileUpload:MaxFileSizeInBytes", 5_368_709_120); // Default: 5 GB
+var maxFileSizeInGB = maxFileSizeInBytes / 1_073_741_824.0; // Convert to GB for logging
+
+Console.WriteLine($"📦 Max file upload size: {maxFileSizeInGB:F2} GB ({maxFileSizeInBytes:N0} bytes)");
+
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 500_000_000; // 500 MB
+    options.MultipartBodyLengthLimit = maxFileSizeInBytes;
 });
 
 builder.WebHost.ConfigureKestrel(serverOptions =>
 {
-    serverOptions.Limits.MaxRequestBodySize = 500_000_000; // 500 MB
+    serverOptions.Limits.MaxRequestBodySize = maxFileSizeInBytes;
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>

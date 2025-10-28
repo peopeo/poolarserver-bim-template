@@ -386,23 +386,34 @@ export function ThreeJsViewer({ darkMode, projectId, revisionId }: ThreeJsViewer
             renderer.shadowMap.enabled = true;
           }
 
-          // Center and fit camera (do this synchronously for correct initial view)
-          const loader = modelLoaderRef.current;
-          loader.centerModel(result.model);
-
-          const cameraPos = loader.getOptimalCameraPosition(result.boundingBox, camera);
-          const center = result.boundingBox.getCenter(new THREE.Vector3());
-
-          camera.position.copy(cameraPos);
-          camera.lookAt(center);
-          controls.target.copy(center);
-          controls.update();
-
-          // Save initial camera state for reset view
-          setInitialCameraState({
-            position: cameraPos.clone(),
-            target: center.clone()
+          // Auto-fit to view: Calculate bounding box and position camera to show all objects
+          const box = new THREE.Box3();
+          scene.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+              box.expandByObject(object);
+            }
           });
+
+          if (!box.isEmpty()) {
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            const distance = maxDim / (2 * Math.tan(fov / 2));
+
+            controls.target.copy(center);
+            camera.position.copy(center);
+            camera.position.y += distance * 0.5;
+            camera.position.z += distance * 1.5;
+            camera.lookAt(center);
+            controls.update();
+
+            // Save initial camera state for reset view
+            setInitialCameraState({
+              position: camera.position.clone(),
+              target: center.clone()
+            });
+          }
 
           // Wait for next frame to ensure GPU buffers are uploaded and rendered
           requestAnimationFrame(() => {

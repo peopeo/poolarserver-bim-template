@@ -24,9 +24,9 @@ interface BabylonViewerProps {
 /**
  * Main Babylon.js Viewer Component
  *
- * This viewer provides BIM model visualization using Babylon.js with WebGPU support.
+ * This viewer provides BIM model visualization using Babylon.js with WebGL rendering.
  * Features:
- * - WebGPU rendering (falls back to WebGL)
+ * - WebGL rendering
  * - ArcRotateCamera for orbit controls
  * - Element selection and highlighting with HighlightLayer
  * - Property panel integration
